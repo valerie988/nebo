@@ -51,7 +51,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setState((s) => ({ ...s, isLoading: false }));
       }
     })();
-  }, []);
+  }, [router]);
 
   const login = async (token: string, role: Role) => {
     await AsyncStorage.setItem("nebo_token", token);

@@ -4,256 +4,244 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  ActivityIndicator,
+  RefreshControl,
+  StyleSheet,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useAuth } from "@/components/context/AuthContext";
+import { useState, useEffect, useCallback } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Ionicons } from "@expo/vector-icons";
 
-// ─── Quick Link Card 
-function QuickLink({
-  emoji,
-  label,
-  subtitle,
-  onPress,
-  accent = "#1B4332",
-}: {
-  emoji: string;
-  label: string;
-  subtitle: string;
-  onPress: () => void;
-  accent?: string;
-}) {
+// --- Configuration ---
+const API_URL = "http://172.20.10.1:8000"; 
+
+// --- Helper Components ---
+function QuickLink({ emoji, label, subtitle, onPress, accent = "#1B4332" }: any) {
   return (
     <TouchableOpacity
       onPress={onPress}
       activeOpacity={0.8}
       style={{ backgroundColor: accent }}
-      className="flex-1 rounded-[20px] p-4 mx-[5px]"
+      className="flex-1 rounded-[24px] p-5 mx-[6px] shadow-sm"
     >
-      <Text className="text-[28px] mb-2.5">{emoji}</Text>
-      <Text className="text-white font-[800] text-[14px]">{label}</Text>
-      <Text className="text-white/60 text-[11px] mt-0.5">{subtitle}</Text>
+      <Text className="text-[30px] mb-2">{emoji}</Text>
+      <Text className="text-white font-black text-[14px]">{label}</Text>
+      <Text className="text-white/60 text-[10px] mt-0.5">{subtitle}</Text>
     </TouchableOpacity>
   );
 }
 
-// ─── Menu Row
-function MenuRow({
-  emoji,
-  label,
-  subtitle,
-  onPress,
-  danger = false,
-  rightText,
-}: {
-  emoji: string;
-  label: string;
-  subtitle?: string;
-  onPress: () => void;
-  danger?: boolean;
-  rightText?: string;
-}) {
+function MenuRow({ emoji, label, subtitle, onPress, danger = false, rightText }: any) {
   return (
     <TouchableOpacity
       onPress={onPress}
       activeOpacity={0.7}
-      className="flex-row items-center py-3.5 border-b border-[#F0FAF4]"
+      className="flex-row items-center py-4 border-b border-[#F0FAF4]"
     >
-      <View
-        className={`w-[38px] h-[38px] rounded-xl items-center justify-center mr-3.5 ${
-          danger ? "bg-[#FEF2F2]" : "bg-[#F0FAF4]"
-        }`}
-      >
-        <Text className="text-[18px]">{emoji}</Text>
+      <View className={`w-10 h-10 rounded-2xl items-center justify-center mr-4 ${danger ? "bg-red-50" : "bg-[#F0FAF4]"}`}>
+        <Text className="text-lg">{emoji}</Text>
       </View>
       <View className="flex-1">
-        <Text
-          className={`text-[14px] font-semibold ${
-            danger ? "text-[#DC2626]" : "text-[#1B4332]"
-          }`}
-        >
-          {label}
-        </Text>
-        {subtitle && (
-          <Text className="text-[11px] text-[#95D5B2] mt-px">{subtitle}</Text>
-        )}
+        <Text className={`text-[15px] font-bold ${danger ? "text-red-600" : "text-[#1B4332]"}`}>{label}</Text>
+        {subtitle && <Text className="text-[11px] text-[#95D5B2] mt-0.5">{subtitle}</Text>}
       </View>
-      {rightText && (
-        <Text className="text-[#52B788] text-[12px] font-semibold mr-2">
-          {rightText}
-        </Text>
-      )}
-      <Text
-        className={`text-[20px] ${danger ? "text-[#FCA5A5]" : "text-[#D8F3DC]"}`}
-      >
-        ›
-      </Text>
+      {rightText && <Text className="text-[#52B788] text-xs font-bold mr-2">{rightText}</Text>}
+      <Ionicons name="chevron-forward" size={16} color={danger ? "#FCA5A5" : "#D8F3DC"} />
     </TouchableOpacity>
   );
 }
 
 function Section({ title, children }: { title?: string; children: React.ReactNode }) {
   return (
-    <View className="bg-white rounded-[20px] px-4 mb-3">
+    <View className="bg-white rounded-[28px] px-5 mb-4 shadow-sm border border-[#D8F3DC]">
       {title && (
-        <Text className="text-[#95D5B2] text-[10px] font-bold uppercase tracking-[1.5px] pt-3.5 pb-1">
+        <Text className="text-[#95D5B2] text-[10px] font-black uppercase tracking-[2px] pt-5 pb-1">
           {title}
         </Text>
       )}
       {children}
-      <View className="h-0.5" />
+      <View className="h-2" />
     </View>
   );
 }
 
-// ─── Farmer Profile Screen 
+// --- Main Screen ---
 export default function FarmerProfileScreen() {
   const { logout } = useAuth();
   const router = useRouter();
 
-  const farmer = {
-    name: "Jean-Pierre Nkomo",
-    email: "jp.nkomo@email.com",
-    location: "Bafoussam, West Region",
-    memberSince: "2025",
-    totalProducts: 14,
-    totalOrders: 38,
+  const [farmer, setFarmer] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const fetchProfile = async () => {
+    try {
+      // 1. Get token (Ensuring key matches LoginScreen)
+      const token = await AsyncStorage.getItem("userToken") || await AsyncStorage.getItem("token");
+      
+      if (!token) {
+        setLoading(false);
+        return;
+      }
+
+      // 2. API Call
+      const response = await fetch(`${API_URL}/auth/me`, {
+        method: "GET",
+        headers: { 
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+      });
+
+      const data = await response.json();
+      
+      if (response.ok) {
+        setFarmer(data); // This uses your UserOut fields: full_name, email, role, etc.
+      } else {
+        console.error("Backend Error:", data.detail);
+      }
+    } catch (err) {
+      console.error("Network Error:", err);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
   };
 
+  useEffect(() => {
+    fetchProfile();
+  }, []);
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    fetchProfile();
+  }, []);
+
   const handleLogout = () => {
-    Alert.alert("Log out", "Are you sure you want to log out?", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Log out", style: "destructive", onPress: logout },
+    Alert.alert("Log Out", "Are you sure you want to exit NeBo?", [
+      { text: "Stay", style: "cancel" },
+      { text: "Log Out", style: "destructive", onPress: logout },
     ]);
   };
+
+  if (loading) {
+    return (
+      <View className="flex-1 bg-[#F0FAF4] items-center justify-center">
+        <ActivityIndicator size="large" color="#1B4332" />
+      </View>
+    );
+  }
 
   return (
     <View className="flex-1 bg-[#F0FAF4]">
       <SafeAreaView className="flex-1">
-        <ScrollView 
-          showsVerticalScrollIndicator={false} 
+        <ScrollView
+          showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: 40 }}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#1B4332" />
+          }
         >
-          {/* Bold header */}
-          <View className="px-5 pt-5 pb-4">
-            <Text className="text-[#1B4332] text-[32px] font-[900] tracking-[-1px]">
+          {/* Header */}
+          <View className="px-6 pt-6 pb-4">
+            <Text className="text-[#1B4332] text-[36px] font-black tracking-tighter">
               Profile
             </Text>
           </View>
 
-          {/* Hero card */}
-          <View className="mx-5 bg-[#1B4332] rounded-[24px] p-5 mb-3">
-            <View className="flex-row items-center mb-5">
-              {/* Avatar */}
-              <View className="w-[68px] h-[68px] rounded-[20px] bg-[#2D6A4F] items-center justify-center mr-4">
-                <Text className="text-[34px]">👨‍🌾</Text>
+          {/* Hero Card - Dynamic Data Mapping */}
+          <View className="mx-6 bg-[#1B4332] rounded-[32px] p-6 mb-5 shadow-xl">
+            <View className="flex-row items-center mb-6">
+              <View className="w-[75px] h-[75px] rounded-[24px] bg-[#2D6A4F] items-center justify-center mr-4">
+                <Text className="text-[40px]">👨‍🌾</Text>
               </View>
-
               <View className="flex-1">
-                <Text className="text-white font-[800] text-[17px]" numberOfLines={1}>
-                  {farmer.name}
+                {/* MATCHING Pydantic full_name */}
+                <Text className="text-white font-black text-xl" numberOfLines={1}>
+                  {farmer?.full_name || "NeBo Farmer"}
                 </Text>
-                <Text className="text-[#52B788] text-[12px] mt-0.5">{farmer.email}</Text>
-                <View className="self-start bg-[#2D6A4F] rounded-full px-2.5 py-1 mt-2">
-                  <Text className="text-[#95D5B2] text-[11px] font-bold">🌱 Farmer</Text>
+                {/* MATCHING Pydantic email */}
+                <Text className="text-[#95D5B2] text-xs font-semibold">{farmer?.email}</Text>
+                <View className="self-start bg-[#40916C] rounded-full px-3 py-1 mt-2">
+                  <Text className="text-white text-[9px] font-black uppercase tracking-widest">
+                    🌱 {farmer?.role || "Farmer"}
+                  </Text>
                 </View>
               </View>
-
-              <TouchableOpacity
-                activeOpacity={0.8}
-                className="bg-[#2D6A4F] rounded-xl px-3.5 py-2"
-              >
-                <Text className="text-[#95D5B2] text-[12px] font-bold">Edit</Text>
-              </TouchableOpacity>
             </View>
 
-            {/* Stats strip */}
-            <View className="flex-row bg-[#2D6A4F] rounded-[16px] overflow-hidden">
-              {[
-                { label: "Products", value: String(farmer.totalProducts) },
-                { label: "Orders", value: String(farmer.totalOrders) },
-                { label: "Since", value: farmer.memberSince },
-              ].map((s, i) => (
-                <View
-                  key={i}
-                  className={`flex-1 items-center py-3 ${
-                    i < 2 ? "border-r border-[#1B4332]" : ""
-                  }`}
-                >
-                  <Text className="text-white font-[800] text-[16px]">{s.value}</Text>
-                  <Text className="text-[#52B788] text-[10px] mt-0.5">{s.label}</Text>
-                </View>
-              ))}
+            {/* Stats Bar */}
+            <View className="flex-row bg-[#2D6A4F] rounded-[22px] py-4">
+              <View className="flex-1 items-center border-r border-[#1B4332]">
+                <Text className="text-white font-black text-lg">{farmer?.total_products || "0"}</Text>
+                <Text className="text-[#95D5B2] text-[9px] font-black uppercase">Items</Text>
+              </View>
+              <View className="flex-1 items-center border-r border-[#1B4332]">
+                <Text className="text-white font-black text-lg">{farmer?.total_orders || "0"}</Text>
+                <Text className="text-[#95D5B2] text-[9px] font-black uppercase">Orders</Text>
+              </View>
+              <View className="flex-1 items-center">
+                <Text className="text-white font-black text-lg" numberOfLines={1}>
+                  {farmer?.location?.split(',')[0] || "Buea"}
+                </Text>
+                <Text className="text-[#95D5B2] text-[9px] font-black uppercase">Region</Text>
+              </View>
             </View>
           </View>
 
-          {/* Quick links */}
-          <View className="mx-5 mb-3">
-            <Text className="text-[#95D5B2] text-[10px] font-bold uppercase tracking-[1.5px] mb-2.5 ml-1">
-              Quick access
-            </Text>
+          {/* Quick Links */}
+          <View className="px-6 mb-6">
             <View className="flex-row">
               <QuickLink
                 emoji="🌾"
-                label="My Products"
-                subtitle={`${farmer.totalProducts} listed`}
+                label="My Store"
+                subtitle="Manage stock"
                 onPress={() => router.push("/farmer/my-products")}
                 accent="#2D6A4F"
               />
               <QuickLink
-                emoji="📊"
-                label="Dashboard"
-                subtitle="Stats & insights"
+                emoji="📈"
+                label="Insights"
+                subtitle="View sales"
                 onPress={() => router.push("/farmer/dashboard")}
                 accent="#40916C"
               />
             </View>
           </View>
 
-          {/* Menu sections */}
-          <View className="px-5">
-            <Section title="Account">
-              <MenuRow emoji="✏️" label="Edit profile" subtitle="Name, phone and location" onPress={() => {}} />
-              <MenuRow emoji="🔒" label="Change password" subtitle="Keep your account secure" onPress={() => {}} />
-              <MenuRow emoji="📍" label="Farm location" subtitle={farmer.location} onPress={() => {}} />
+          {/* Menu Sections */}
+          <View className="px-6">
+            <Section title="Account Details">
+              <MenuRow emoji="👤" label="Profile Info" subtitle="Update name & phone" onPress={() => {}} />
+              <MenuRow emoji="📍" label="Farm Location" subtitle={farmer?.location || "Update your address"} onPress={() => {}} />
+              <MenuRow emoji="🛡️" label="Verification" rightText={farmer?.is_verified ? "Verified" : "Pending"} onPress={() => {}} />
             </Section>
 
-            <Section title="My Farm">
-              <MenuRow
-                emoji="🌾"
-                label="My products"
-                subtitle="Manage your listings"
-                rightText={`${farmer.totalProducts}`}
-                onPress={() => router.push("/farmer/my-products")}
-              />
-              <MenuRow
-                emoji="📦"
-                label="Incoming orders"
-                subtitle="Orders from customers"
-                rightText={`${farmer.totalOrders}`}
-                onPress={() => router.push("/farmer/dashboard")}
-              />
+            <Section title="Store Management">
               <MenuRow
                 emoji="➕"
-                label="Add new product"
-                subtitle="List a new item"
+                label="Add New Product"
+                subtitle="List fresh crops"
                 onPress={() => router.push("/(tabs)/(farmer-tabs)/addProduct")}
+              />
+              <MenuRow
+                emoji="🛒"
+                label="Pending Orders"
+                rightText={String(farmer?.total_orders || 0)}
+                onPress={() => {}}
               />
             </Section>
 
-            <Section title="Preferences">
-              <MenuRow emoji="🔔" label="Notifications" subtitle="Manage push alerts" onPress={() => {}} />
-              <MenuRow emoji="🌐" label="Language" subtitle="English" onPress={() => {}} />
-            </Section>
-
-            <Section title="More">
-              <MenuRow emoji="🔄" label="Switch to customer" subtitle="Log out and switch role" onPress={logout} />
-              <MenuRow emoji="❓" label="Help & support" onPress={() => {}} />
-              <MenuRow emoji="📄" label="Terms & Privacy" onPress={() => {}} />
+            <Section title="App Settings">
+              <MenuRow emoji="🔔" label="Notifications" subtitle="Alerts & sounds" onPress={() => {}} />
+              <MenuRow emoji="🔄" label="Switch Role" subtitle="Enter Customer mode" onPress={logout} />
             </Section>
 
             <Section>
-              <MenuRow emoji="🚪" label="Log out" onPress={handleLogout} danger />
+              <MenuRow emoji="🚪" label="Sign Out" onPress={handleLogout} danger />
             </Section>
           </View>
         </ScrollView>

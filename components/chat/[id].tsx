@@ -6,219 +6,280 @@ import {
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useRef, useState } from "react";
-import { chatService, Message } from "@/components/services/chatService";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useAuth } from "@/components/context/AuthContext";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { chatService, Message } from "@/components/services/chatService";
 
-// ─── Format message time ──────────────────────────────────────────────────────
-function formatMsgTime(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleTimeString("en", { hour: "2-digit", minute: "2-digit", hour12: true });
+const POLL_INTERVAL_MS = 8000; // poll every 8 seconds when online
+
+// ─── Status tick icons ────────────────────────────────────────────────────────
+function StatusTick({ status }: { status: Message["status"] }) {
+  if (status === "sending") return <Text style={{ color: "#95D5B2", fontSize: 11 }}>⏳</Text>;
+  if (status === "failed")  return <Text style={{ color: "#EF4444", fontSize: 11 }}>!</Text>;
+  if (status === "sent")    return <Text style={{ color: "#95D5B2", fontSize: 11 }}>✓</Text>;
+  return <Text style={{ color: "#52B788", fontSize: 11 }}>✓✓</Text>; // delivered
 }
 
-function formatDayLabel(iso: string): string {
-  const d = new Date(iso);
-  const now = new Date();
-  const diff = Math.floor((now.getTime() - d.getTime()) / 86400000);
-  if (diff === 0) return "Today";
-  if (diff === 1) return "Yesterday";
-  return d.toLocaleDateString("en", { weekday: "long", day: "numeric", month: "short" });
-}
+// ─── Single message bubble ────────────────────────────────────────────────────
+function MessageBubble({ message, isMe }: { message: Message; isMe: boolean }) {
+  const time = new Date(message.createdAt).toLocaleTimeString("en", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 
-// ─── Message bubble ───────────────────────────────────────────────────────────
-function Bubble({ msg, isMine }: { msg: Message; isMine: boolean }) {
   return (
     <View
-      className={`mb-1 max-w-[78%] ${isMine ? "self-end items-end" : "self-start items-start"}`}
+      style={{
+        alignSelf: isMe ? "flex-end" : "flex-start",
+        maxWidth: "75%",
+        marginBottom: 8,
+      }}
     >
       <View
-        className={`rounded-2xl px-4 py-2.5 ${
-          isMine
-            ? "bg-[#1B4332] rounded-br-sm"
-            : "bg-white rounded-bl-sm"
-        }`}
+        style={{
+          backgroundColor: isMe ? "#1B4332" : "#FFFFFF",
+          borderRadius: 18,
+          borderBottomRightRadius: isMe ? 4 : 18,
+          borderBottomLeftRadius: isMe ? 18 : 4,
+          paddingHorizontal: 14,
+          paddingVertical: 9,
+        }}
       >
-        <Text
-          className={`text-sm leading-5 ${isMine ? "text-white" : "text-[#1B4332]"}`}
-        >
-          {msg.text}
+        <Text style={{ color: isMe ? "#D8F3DC" : "#1B4332", fontSize: 15, lineHeight: 21 }}>
+          {message.text}
         </Text>
       </View>
 
-      {/* Time + sync status */}
-      <View className="flex-row items-center mt-0.5 gap-1">
-        <Text className="text-[#95D5B2] text-xs">{formatMsgTime(msg.createdAt)}</Text>
-        {isMine && (
-          <Text className="text-xs" style={{ color: msg.synced ? "#52B788" : "#95D5B2" }}>
-            {msg.synced ? "✓✓" : "✓"}
-          </Text>
-        )}
+      <View
+        style={{
+          flexDirection: "row",
+          justifyContent: isMe ? "flex-end" : "flex-start",
+          alignItems: "center",
+          gap: 4,
+          marginTop: 3,
+          paddingHorizontal: 4,
+        }}
+      >
+        <Text style={{ color: "#95D5B2", fontSize: 11 }}>{time}</Text>
+        {isMe && <StatusTick status={message.status} />}
       </View>
     </View>
   );
 }
 
-// ─── Day separator ────────────────────────────────────────────────────────────
-function DaySeparator({ label }: { label: string }) {
-  return (
-    <View className="flex-row items-center my-4 px-4">
-      <View className="flex-1 h-px bg-[#D8F3DC]" />
-      <Text className="text-[#95D5B2] text-xs mx-3 font-medium">{label}</Text>
-      <View className="flex-1 h-px bg-[#D8F3DC]" />
-    </View>
-  );
-}
-
-// ─── Chat Screen ──────────────────────────────────────────────────────────────
-export default function ChatConversation() {
-  const { id, name, role: participantRole, participantId } = useLocalSearchParams<{
+// ─── Conversation Screen ──────────────────────────────────────────────────────
+export default function ConversationScreen() {
+  const router = useRouter();
+  const { user } = useAuth();
+  const params = useLocalSearchParams<{
     id: string;
     name: string;
-    role: "farmer" | "customer";
+    role: string;
     participantId: string;
   }>();
-  const router = useRouter();
-  const { token } = useAuth();
+
+  const conversationId = params.id;
+  const participantName = params.name ?? "Chat";
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState("");
-  const [sending, setSending] = useState(false);
-  const [currentUserId, setCurrentUserId] = useState("");
+  const [loading, setLoading] = useState(true);
   const listRef = useRef<FlatList>(null);
+  const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // ── Load initial messages ──────────────────────────────────────────────────
   useEffect(() => {
-    // Get current user id from storage
-    AsyncStorage.getItem("nebo_user_id").then((uid) => {
-      if (uid) setCurrentUserId(uid);
-    });
-    loadMessages();
+    (async () => {
+      const msgs = await chatService.getMessages(conversationId);
+      setMessages(msgs);
+      setLoading(false);
+      scrollToBottom();
+    })();
+  }, [conversationId]);
+
+  // ── Poll for incoming messages ─────────────────────────────────────────────
+  useEffect(() => {
+    pollTimer.current = setInterval(async () => {
+      const incoming = await chatService.pollIncoming(conversationId);
+      if (incoming.length > 0) {
+        setMessages((prev) => {
+          const ids = new Set(prev.map((m) => m.id));
+          const fresh = incoming.filter((m) => !ids.has(m.id));
+          return fresh.length > 0
+            ? [...prev, ...fresh].sort(
+                (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+              )
+            : prev;
+        });
+        scrollToBottom();
+      }
+    }, POLL_INTERVAL_MS);
+
+    return () => {
+      if (pollTimer.current) clearInterval(pollTimer.current);
+    };
+  }, [conversationId]);
+
+  const scrollToBottom = useCallback(() => {
+    setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
   }, []);
 
-  const loadMessages = async () => {
-    const msgs = await chatService.getMessages(id);
-    setMessages(msgs);
-    setTimeout(() => listRef.current?.scrollToEnd({ animated: false }), 100);
-  };
+  // ── Send a message ─────────────────────────────────────────────────────────
+  const handleSend = useCallback(async () => {
+    const trimmed = text.trim();
+    if (!trimmed || !user?.id) return;
 
-  const handleSend = async () => {
-    if (!text.trim() || sending) return;
-    setSending(true);
-    const msg = await chatService.sendMessage(id, currentUserId, participantId, text);
-    setMessages((prev) => [...prev, msg]);
     setText("");
-    setSending(false);
-    setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 50);
-  };
 
-  // Group messages by day
-  type ListItem = { type: "day"; label: string; key: string } | { type: "msg"; msg: Message };
-  const listItems: ListItem[] = [];
-  let lastDay = "";
-  for (const msg of messages) {
-    const day = new Date(msg.createdAt).toDateString();
-    if (day !== lastDay) {
-      listItems.push({ type: "day", label: formatDayLabel(msg.createdAt), key: day });
-      lastDay = day;
-    }
-    listItems.push({ type: "msg", msg });
-  }
+    // Optimistic: show immediately in the list
+    const optimistic = await chatService.sendMessage(
+      conversationId,
+      user.id,
+      params.participantId,
+      trimmed
+    );
 
+    setMessages((prev) => [...prev, optimistic]);
+    scrollToBottom();
+
+    // After sending, reflect the final status from storage
+    setTimeout(async () => {
+      const updated = await chatService.getMessages(conversationId);
+      setMessages(updated);
+    }, 2000);
+  }, [text, user, conversationId, params.participantId, scrollToBottom]);
+
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <View className="flex-1 bg-[#F0FAF4]">
-      <SafeAreaView className="flex-1">
-        <KeyboardAvoidingView
-          className="flex-1"
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
+    <View style={{ flex: 1, backgroundColor: "#F0FAF4" }}>
+      <SafeAreaView style={{ flex: 1 }}>
+
+        {/* Header */}
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            paddingHorizontal: 16,
+            paddingVertical: 12,
+            borderBottomWidth: 0.5,
+            borderBottomColor: "#B7E4C7",
+            backgroundColor: "#FFFFFF",
+          }}
         >
+          <TouchableOpacity onPress={() => router.back()} style={{ marginRight: 12, padding: 4 }}>
+            <Text style={{ color: "#1B4332", fontSize: 22 }}>←</Text>
+          </TouchableOpacity>
 
-          {/* Header */}
-          <View className="flex-row items-center bg-white px-4 py-3 border-b border-[#F0FAF4]">
-            <TouchableOpacity onPress={() => router.back()} className="mr-3 p-1">
-              <Text className="text-[#1B4332] text-xl font-bold">‹</Text>
-            </TouchableOpacity>
-
-            {/* Avatar */}
-            <View
-              className="rounded-2xl items-center justify-center mr-3"
-              style={{
-                width: 42,
-                height: 42,
-                backgroundColor: participantRole === "farmer" ? "#D8F3DC" : "#DBEAFE",
-              }}
-            >
-              <Text className="font-bold text-sm" style={{ color: participantRole === "farmer" ? "#1B4332" : "#1E40AF" }}>
-                {name?.split(" ").map((n: string) => n[0]).slice(0, 2).join("").toUpperCase()}
-              </Text>
-            </View>
-
-            <View className="flex-1">
-              <Text className="text-[#1B4332] font-bold text-base">{name}</Text>
-              <Text className="text-[#95D5B2] text-xs capitalize">
-                {participantRole === "farmer" ? "🌱 Farmer" : "🛍️ Customer"}
-              </Text>
-            </View>
+          <View
+            style={{
+              width: 38, height: 38, borderRadius: 12,
+              backgroundColor: params.role === "farmer" ? "#D8F3DC" : "#DBEAFE",
+              alignItems: "center", justifyContent: "center", marginRight: 10,
+            }}
+          >
+            <Text style={{ fontWeight: "700", fontSize: 14, color: params.role === "farmer" ? "#1B4332" : "#1E40AF" }}>
+              {participantName.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase()}
+            </Text>
           </View>
 
-          {/* Messages */}
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: "#1B4332", fontWeight: "700", fontSize: 16 }}>{participantName}</Text>
+            <Text style={{ color: "#52B788", fontSize: 12, marginTop: 1 }}>
+              {params.role === "farmer" ? "🌱 Farmer" : "🛍️ Customer"}
+            </Text>
+          </View>
+        </View>
+
+        {/* Messages */}
+        {loading ? (
+          <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+            <ActivityIndicator color="#52B788" />
+          </View>
+        ) : (
           <FlatList
             ref={listRef}
-            data={listItems}
-            keyExtractor={(item, i) =>
-              item.type === "day" ? item.key : item.msg.id
-            }
-            contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8 }}
+            data={messages}
+            keyExtractor={(m) => m.id}
+            contentContainerStyle={{ padding: 16, paddingBottom: 8 }}
             showsVerticalScrollIndicator={false}
-            onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
-            renderItem={({ item }) => {
-              if (item.type === "day") return <DaySeparator label={item.label} />;
-              const isMine = item.msg.senderId === currentUserId;
-              return <Bubble msg={item.msg} isMine={isMine} />;
-            }}
+            onContentSizeChange={scrollToBottom}
+            renderItem={({ item }) => (
+              <MessageBubble message={item} isMe={item.senderId === user?.id} />
+            )}
             ListEmptyComponent={
-              <View className="flex-1 items-center justify-center py-20">
-                <Text className="text-4xl mb-3">👋</Text>
-                <Text className="text-[#1B4332] font-semibold text-base">Say hello!</Text>
-                <Text className="text-[#95D5B2] text-sm mt-1">Start the conversation</Text>
+              <View style={{ flex: 1, alignItems: "center", justifyContent: "center", marginTop: 80 }}>
+                <Text style={{ fontSize: 40, marginBottom: 8 }}>👋</Text>
+                <Text style={{ color: "#1B4332", fontWeight: "700" }}>Say hello!</Text>
+                <Text style={{ color: "#95D5B2", fontSize: 13, marginTop: 4 }}>
+                  Messages send when you are offline and deliver when connected.
+                </Text>
               </View>
             }
           />
+        )}
 
-          {/* Input bar */}
-          <View className="flex-row items-end bg-white px-4 py-3 border-t border-[#F0FAF4]" style={{ gap: 10 }}>
-            <View className="flex-1 bg-[#F0FAF4] rounded-2xl px-4 py-2.5 min-h-[44px] justify-center">
+        {/* Input bar */}
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          keyboardVerticalOffset={0}
+        >
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "flex-end",
+              gap: 10,
+              padding: 12,
+              paddingBottom: 16,
+              borderTopWidth: 0.5,
+              borderTopColor: "#B7E4C7",
+              backgroundColor: "#FFFFFF",
+            }}
+          >
+            <View
+              style={{
+                flex: 1,
+                borderWidth: 1.5,
+                borderColor: text ? "#52B788" : "#D8F3DC",
+                borderRadius: 22,
+                paddingHorizontal: 14,
+                paddingVertical: 8,
+                maxHeight: 120,
+                backgroundColor: "#F0FAF4",
+              }}
+            >
               <TextInput
                 value={text}
                 onChangeText={setText}
-                placeholder="Message…"
+                placeholder="Type a message…"
                 placeholderTextColor="#B7E4C7"
-                className="text-[#1B4332] text-sm"
                 multiline
-                maxLength={1000}
-                style={{ maxHeight: 120 }}
+                style={{ color: "#1B4332", fontSize: 15, lineHeight: 21 }}
+                onSubmitEditing={handleSend}
+                blurOnSubmit={false}
               />
             </View>
 
-            {/* Send button */}
             <TouchableOpacity
               onPress={handleSend}
-              disabled={!text.trim() || sending}
-              activeOpacity={0.8}
-              className="rounded-2xl items-center justify-center"
+              disabled={!text.trim()}
               style={{
                 width: 44,
                 height: 44,
+                borderRadius: 22,
                 backgroundColor: text.trim() ? "#1B4332" : "#D8F3DC",
+                alignItems: "center",
+                justifyContent: "center",
               }}
             >
-              <Text className="text-white text-lg">↑</Text>
+              <Text style={{ fontSize: 20 }}>↑</Text>
             </TouchableOpacity>
           </View>
-
         </KeyboardAvoidingView>
+
       </SafeAreaView>
     </View>
   );

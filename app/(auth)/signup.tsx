@@ -70,7 +70,7 @@ function FarmerForm({ values, onChange, errors }: FormProps) {
   );
 }
 
-// ─── CUSTOMER FORM ────────────────────────────────────────────────────────────
+//  CUSTOMER FORM 
 function CustomerForm({ values, onChange, errors }: FormProps) {
   return (
     <>
@@ -150,32 +150,23 @@ const handleSignup = async () => {
   
   try {
     setLoading(true);
-    let res;
-
-    if (role === "farmer") {
-      // Farmer needs everything including location
-      res = await authService.signupFarmer({
-        full_name: values.full_name,
-        email: values.email,
-        phone: values.phone,
-        location: values.location,
-        password: values.password,
-        role: "farmer",
-      });
-    } else {
-      // Customer ONLY needs these 4 fields (no location)
-      res = await authService.signupCustomer({
-        full_name: values.full_name,
-        email: values.email,
-        phone: values.phone,
-        password: values.password,
-        role: "customer",
-      });
-    }
     
+    // Call the unified signup service
+    const res = await authService.signup({
+      full_name: values.full_name,
+      email: values.email,
+      phone: values.phone,
+      location: role === "farmer" ? values.location : "Customer Location", 
+      password: values.password,
+      role: role, // "farmer" or "customer"
+    });
     await login(res.access_token, res.role);
+    
+    // Optional: Redirect or show success
+    router.replace("/(auth)/login"); 
+    
   } catch (err: any) {
-    setGlobalError(err.message ?? "Signup failed. Please try again.");
+    setGlobalError(err.message);
   } finally {
     setLoading(false);
   }
