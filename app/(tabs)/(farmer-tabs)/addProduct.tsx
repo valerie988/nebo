@@ -88,7 +88,7 @@ export default function AddProductScreen() {
     setLoading(true);
 
     try {
-      const token = await AsyncStorage.getItem("unebo_token") || await AsyncStorage.getItem("token");
+      const token = await AsyncStorage.getItem("nebo_token") || await AsyncStorage.getItem("token");
       
       // 2. Prepare Multipart Form Data
       const formData = new FormData();

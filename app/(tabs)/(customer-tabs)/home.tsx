@@ -4,13 +4,18 @@ import {
   ScrollView,
   TextInput,
   TouchableOpacity,
+  ActivityIndicator,
+  RefreshControl,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Svg, Path, Circle } from "react-native-svg";
 import { useAuth } from "@/components/context/AuthContext";
+import { useRouter } from "expo-router";
 
-// ─── Mock data ────────────────────────────────────────────────────────────────
+// --- Configuration ---
+const API_URL = "http://172.20.10.2:8000";
+
 const CATEGORIES = [
   { id: "1", label: "All", emoji: "✨" },
   { id: "2", label: "Veggies", emoji: "🥦" },
@@ -20,20 +25,13 @@ const CATEGORIES = [
   { id: "6", label: "Roots", emoji: "🥕" },
 ];
 
-const FEATURED = [
-  { id: "1", name: "Fresh Tomatoes", farmer: "Nkomo Farm", price: "500 XAF / kg", emoji: "🍅", tag: "Popular", tagColor: "text-[#E74C3C]", tagBg: "bg-red-50", bg: "bg-[#FFF0EE]" },
-  { id: "2", name: "Sweet Plantains", farmer: "Green Valley", price: "300 XAF / bunch", emoji: "🍌", tag: "Seasonal", tagColor: "text-[#F39C12]", tagBg: "bg-orange-50", bg: "bg-[#FFFBEE]" },
-  { id: "3", name: "Garden Spinach", farmer: "Fokou Fields", price: "250 XAF / bunch", emoji: "🥬", tag: "Fresh", tagColor: "text-[#27AE60]", tagBg: "bg-green-50", bg: "bg-[#F0FAF4]" },
-  { id: "4", name: "Organic Carrots", farmer: "Biya Roots", price: "400 XAF / kg", emoji: "🥕", tag: "Organic", tagColor: "text-[#E67E22]", tagBg: "bg-orange-50", bg: "bg-[#FFF5EE]" },
-];
-
-const NEARBY_FARMERS = [
+const STATIC_FARMERS = [
   { id: "1", name: "Nkomo Farm", location: "Bafoussam", emoji: "👨‍🌾", rating: 4.8 },
   { id: "2", name: "Green Valley", location: "Buea", emoji: "👩‍🌾", rating: 4.6 },
-  { id: "3", name: "Fokou Fields", location: "Yaoundé", emoji: "👨‍🌾", rating: 4.9 },
+
 ];
 
-// ─── Search Bar ───────────────────────────────────────────────────────────────
+// --- Sub-Components (Preserving your exact UI) ---
 function SearchBar({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   return (
     <View className="flex-row items-center bg-[#F0FAF4] rounded-2xl px-4 h-12 border border-[#D8F3DC]">
@@ -52,65 +50,37 @@ function SearchBar({ value, onChange }: { value: string; onChange: (v: string) =
   );
 }
 
-// ─── Product Card ─────────────────────────────────────────────────────────────
-function ProductCard({ item }: { item: (typeof FEATURED)[0] }) {
-  return (
-    <TouchableOpacity
-      activeOpacity={0.85}
-      className={`w-40 rounded-3xl p-3.5 mr-3.5 border border-[#D8F3DC] ${item.bg}`}
-    >
-      <View className="h-[90px] rounded-2xl items-center justify-center mb-2.5 bg-white/70">
-        <Text className="text-5xl">{item.emoji}</Text>
-      </View>
-
-      <View className={`self-start rounded-full px-2 py-0.5 mb-1.5 ${item.tagBg}`}>
-        <Text className={`${item.tagColor} text-[10px] font-semibold`}>
-          {item.tag}
-        </Text>
-      </View>
-
-      <Text className="text-[#1B4332] font-semibold text-[13px]" numberOfLines={1}>
-        {item.name}
-      </Text>
-      <Text className="text-[#52B788] text-[11px] mt-0.5" numberOfLines={1}>
-        {item.farmer}
-      </Text>
-      <Text className="text-[#2D6A4F] font-bold text-[13px] mt-1.5">
-        {item.price}
-      </Text>
-    </TouchableOpacity>
-  );
-}
-
-// ─── Farmer Card ──────────────────────────────────────────────────────────────
-function FarmerCard({ item }: { item: (typeof NEARBY_FARMERS)[0] }) {
-  return (
-    <TouchableOpacity
-      activeOpacity={0.85}
-      className="flex-row items-center bg-white rounded-2xl px-4 py-3 mb-3 border border-[#D8F3DC]"
-    >
-      <View className="w-12 h-12 rounded-full bg-[#D8F3DC] items-center justify-center mr-3">
-        <Text className="text-2xl">{item.emoji}</Text>
-      </View>
-
-      <View className="flex-1">
-        <Text className="text-[#1B4332] font-semibold text-[13px]">{item.name}</Text>
-        <Text className="text-[#95D5B2] text-[11px] mt-0.5">📍 {item.location}</Text>
-      </View>
-
-      <View className="items-end">
-        <Text className="text-[#2D6A4F] font-bold text-[13px]">⭐ {item.rating}</Text>
-        <Text className="text-[#95D5B2] text-[11px] mt-0.5">View →</Text>
-      </View>
-    </TouchableOpacity>
-  );
-}
-
 // ─── Home Screen ──────────────────────────────────────────────────────────────
 export default function HomeScreen() {
   const { role } = useAuth();
+  const router = useRouter();
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState("1");
+  const [products, setProducts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const fetchHomeData = async () => {
+    try {
+      const response = await fetch(`${API_URL}/products/`);
+      const data = await response.json();
+      if (response.ok && Array.isArray(data)) {
+        setProducts(data.slice(0, 4)); // Show first 4 featured
+      }
+    }finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchHomeData();
+  }, []);
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    fetchHomeData();
+  }, []);
 
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
@@ -118,7 +88,11 @@ export default function HomeScreen() {
   return (
     <View className="flex-1 bg-[#F8FDF9]">
       <SafeAreaView className="flex-1">
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 32 }}>
+        <ScrollView 
+          showsVerticalScrollIndicator={false} 
+          contentContainerStyle={{ paddingBottom: 32 }}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        >
           
           {/* Header */}
           <View className="px-5 pt-5 pb-3 flex-row items-center justify-between">
@@ -128,9 +102,9 @@ export default function HomeScreen() {
                 Whats fresh today?
               </Text>
             </View>
-            <View className="w-11 h-11 rounded-full bg-[#D8F3DC] items-center justify-center">
+            <TouchableOpacity onPress={() => router.push("/profile")} className="w-11 h-11 rounded-full bg-[#D8F3DC] items-center justify-center">
               <Text className="text-xl">{role === "farmer" ? "🌾" : "🛍️"}</Text>
-            </View>
+            </TouchableOpacity>
           </View>
 
           {/* Search */}
@@ -148,7 +122,7 @@ export default function HomeScreen() {
                 <Text className="text-white text-[17px] font-extrabold leading-6">
                   Fresh harvest{"\n"}just arrived 🌿
                 </Text>
-                <TouchableOpacity className="bg-white rounded-full px-4 py-2 self-start mt-3">
+                <TouchableOpacity onPress={() => router.push("/marketplace")} className="bg-white rounded-full px-4 py-2 self-start mt-3">
                   <Text className="text-[#2D6A4F] text-xs font-bold">Shop now →</Text>
                 </TouchableOpacity>
               </View>
@@ -156,7 +130,7 @@ export default function HomeScreen() {
             </View>
           </View>
 
-          {/* Categories */}
+          {/* Categories (RESTORED) */}
           <View className="mb-5">
             <Text className="text-[#1B4332] font-bold text-[15px] px-5 mb-3">Categories</Text>
             <ScrollView 
@@ -185,13 +159,29 @@ export default function HomeScreen() {
           <View className="mb-6">
             <View className="flex-row items-center justify-between px-5 mb-3">
               <Text className="text-[#1B4332] font-bold text-[15px]">Featured produce</Text>
-              <TouchableOpacity><Text className="text-[#52B788] text-[13px] font-medium">See all</Text></TouchableOpacity>
+              <TouchableOpacity onPress={() => router.push("/marketplace")}><Text className="text-[#52B788] text-[13px] font-medium">See all</Text></TouchableOpacity>
             </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20 }}>
-              {FEATURED.map((item) => (
-                <ProductCard key={item.id} item={item} />
-              ))}
-            </ScrollView>
+            {loading ? (
+              <ActivityIndicator color="#1B4332" className="my-10" />
+            ) : (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20 }}>
+                {products.map((item) => (
+                  <TouchableOpacity
+                    key={item.id}
+                    onPress={() => router.push("/marketplace")}
+                    activeOpacity={0.85}
+                    className="w-40 rounded-3xl p-3.5 mr-3.5 border border-[#D8F3DC] bg-[#F0FAF4]"
+                  >
+                    <View className="h-[90px] rounded-2xl items-center justify-center mb-2.5 bg-white/70">
+                      <Text className="text-5xl">{item.emoji || "📦"}</Text>
+                    </View>
+                    <Text className="text-[#1B4332] font-semibold text-[13px]" numberOfLines={1}>{item.name}</Text>
+                    <Text className="text-[#52B788] text-[11px] mt-0.5" numberOfLines={1}>{item.farmer_name}</Text>
+                    <Text className="text-[#2D6A4F] font-bold text-[13px] mt-1.5">{item.price} XAF</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
           </View>
 
           {/* Nearby Farmers */}
@@ -200,8 +190,22 @@ export default function HomeScreen() {
               <Text className="text-[#1B4332] font-bold text-[15px]">Nearby farmers</Text>
               <TouchableOpacity><Text className="text-[#52B788] text-[13px] font-medium">See all</Text></TouchableOpacity>
             </View>
-            {NEARBY_FARMERS.map((farmer) => (
-              <FarmerCard key={farmer.id} item={farmer} />
+            {STATIC_FARMERS.map((farmer) => (
+              <TouchableOpacity
+                key={farmer.id}
+                className="flex-row items-center bg-white rounded-2xl px-4 py-3 mb-3 border border-[#D8F3DC]"
+              >
+                <View className="w-12 h-12 rounded-full bg-[#D8F3DC] items-center justify-center mr-3">
+                  <Text className="text-2xl">{farmer.emoji}</Text>
+                </View>
+                <View className="flex-1">
+                  <Text className="text-[#1B4332] font-semibold text-[13px]">{farmer.name}</Text>
+                  <Text className="text-[#95D5B2] text-[11px] mt-0.5">📍 {farmer.location}</Text>
+                </View>
+                <View className="items-end">
+                  <Text className="text-[#2D6A4F] font-bold text-[13px]">⭐ {farmer.rating}</Text>
+                </View>
+              </TouchableOpacity>
             ))}
           </View>
 

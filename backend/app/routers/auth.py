@@ -13,9 +13,14 @@ from app.core.config import settings
 from app.models.user import User, RefreshToken
 from app.schemas.schemas import (
     SignupRequest, LoginRequest, TokenResponse,
-    RefreshRequest, VerifyEmailRequest,
+    RefreshRequest, UserUpdate, VerifyEmailRequest,
     ForgotPasswordRequest, ResetPasswordRequest, UserOut
 )
+
+from app.models.product import Product
+from app.models.order import Order
+# Ensure UserOutWithStats is defined in your schemas.py
+from app.schemas.schemas import UserOutWithStats 
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 pwd_ctx = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
@@ -154,7 +159,44 @@ def logout(
     return {"message": "Logged out successfully"}
 
 
-# ─── Me ───────────────────────────────────────────────────────────────────────
-@router.get("/me", response_model=UserOut)
-def get_me(current_user: User = Depends(get_current_user)):
+
+@router.get("/me", response_model=UserOutWithStats)
+async def get_me(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    order_count = db.query(Order).filter(Order.customer_id == current_user.id).count()
+    product_count = db.query(Product).filter(Product.farmer_id == current_user.id).count()
+
+    return {
+        "id": current_user.id,
+        "full_name": current_user.full_name,
+        "email": current_user.email,
+        "phone": current_user.phone,
+        "role": current_user.role,
+        "location": current_user.location,
+        "avatar_url": current_user.avatar_url,
+        "is_verified": current_user.is_verified,
+        "created_at": current_user.created_at,
+        "total_products": product_count,
+        "total_orders": order_count
+    }
+    
+
+@router.patch("/update", response_model=UserOut)
+async def update_profile(
+    body: UserUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    # Convert input data to a dictionary, excluding unset values
+    update_data = body.model_dump(exclude_unset=True)
+    
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No data provided to update")
+
+    # Apply updates to the user object
+    for key, value in update_data.items():
+        setattr(current_user, key, value)
+
+    db.add(current_user)
+    db.commit()
+    db.refresh(current_user)
     return current_user

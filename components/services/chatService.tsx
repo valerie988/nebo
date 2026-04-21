@@ -1,9 +1,9 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import NetInfo from "@react-native-community/netinfo";
 
-const API_URL = "http://192.168.10.115:8000"; 
+const API_URL = "http://172.20.10.2:8000"; 
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// ─── Types ─
 
 export type MessageStatus = "sending" | "sent" | "delivered" | "failed";
 

@@ -1,7 +1,7 @@
 
 import axios from 'axios';
 
-const API_URL = "http://192.168.10.115:8000"; 
+const API_URL = "http://172.20.10.2:8000"; 
 
 export const authService = {
 

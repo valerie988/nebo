@@ -1,8 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 from sqlalchemy import (
-    Column, String, Boolean, DateTime, ForeignKey,
-    Text, Integer, Float, Enum, JSON
+    Column, String, Boolean, DateTime, ForeignKey, Enum, JSON
 )
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -27,7 +26,7 @@ class User(Base):
     phone           = Column(String(20), nullable=True)
     role            = Column(Enum("farmer", "customer"), nullable=False)
     location        = Column(String(255), nullable=True)   # farmers only
-    avatar_url      = Column(String(500), nullable=True)
+    avatar_url = Column(String, nullable=True, default="https://via.placeholder.com/150")
     is_active       = Column(Boolean, default=False)       # activated via email
     is_verified     = Column(Boolean, default=False)
     created_at      = Column(DateTime(timezone=True), default=utcnow)

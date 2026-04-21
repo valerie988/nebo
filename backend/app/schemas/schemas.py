@@ -100,6 +100,9 @@ class UserUpdate(BaseModel):
     phone: Optional[str] = None
     location: Optional[str] = None
 
+class UserOutWithStats(UserOut):
+    total_products: int
+    total_orders: int
 
 #  Product schemas 
 class ProductOut(BaseModel):
@@ -131,46 +134,33 @@ class ProductUpdate(BaseModel):
     location: Optional[str] = None
     in_stock: Optional[bool] = None
 
-
 #  Order schemas 
-class OrderItemIn(BaseModel):
+class OrderItem(BaseModel):
     product_id: str
+    product_name: str
     quantity: float
-
+    price: float
 
 class OrderCreate(BaseModel):
-    items: List[OrderItemIn]
+    farmer_id: str
+    items: List[OrderItem]
+    total_amount: float
     delivery_address: Optional[str] = None
-    notes: Optional[str] = None
-
-
-class OrderItemOut(BaseModel):
-    product_id: str
-    quantity: float
-    unit_price: float
-    product: Optional[ProductOut] = None
-
-    model_config = {"from_attributes": True}
-
 
 class OrderOut(BaseModel):
     id: str
     customer_id: str
     farmer_id: str
-    status: OrderStatus
     total_amount: float
-    delivery_address: Optional[str]
-    notes: Optional[str]
+    status: str
+    items: List[OrderItem]
     created_at: datetime
-    items: List[OrderItemOut] = []
-    customer: Optional[UserOut] = None
 
-    model_config = {"from_attributes": True}
-
+    class Config:
+        from_attributes = True
 
 class OrderStatusUpdate(BaseModel):
-    status: OrderStatus
-
+    status: str
 
 #  Chat schemas 
 class MessageCreate(BaseModel):

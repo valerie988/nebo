@@ -21,9 +21,7 @@ const ORDERS: {
   { id: "ORD-001", items: "Tomatoes × 2kg, Spinach × 1 bunch",      farmer: "Nkomo Farm",     total: 1250, date: "Today, 10:32 AM",    status: "in_transit", emoji: "🍅" },
   { id: "ORD-002", items: "Sweet Plantains × 3 bunches",             farmer: "Green Valley",   total: 900,  date: "Yesterday, 3:15 PM", status: "delivered",  emoji: "🍌" },
   { id: "ORD-003", items: "Organic Carrots × 1kg, Ginger × 500g",   farmer: "Biya Roots",     total: 700,  date: "Mar 22, 11:00 AM",  status: "delivered",  emoji: "🥕" },
-  { id: "ORD-004", items: "Corn Cobs × 6, Groundnuts × 500g",       farmer: "Savanna Fields", total: 1250, date: "Mar 20, 9:45 AM",   status: "cancelled",  emoji: "🌽" },
-  { id: "ORD-005", items: "Ripe Avocados × 4 pieces",               farmer: "Green Valley",   total: 800,  date: "Mar 18, 2:00 PM",   status: "delivered",  emoji: "🥑" },
-  { id: "ORD-006", items: "Garlic × 1kg, Fresh Herbs bundle",       farmer: "Ngozi Herbs",    total: 950,  date: "Mar 15, 8:30 AM",   status: "processing", emoji: "🧄" },
+
 ];
 
 const STATUS_THEME: Record<OrderStatus, { label: string; text: string; bg: string }> = {
@@ -93,7 +91,7 @@ function OrderCard({ order }: { order: (typeof ORDERS)[0] }) {
   );
 }
 
-// ─── Orders Screen ────────────────────────────────────────────────────────────
+// ─── Orders Screen
 export default function OrdersScreen() {
   const [activeFilter, setActiveFilter] = useState<OrderStatus | "all">("all");
 

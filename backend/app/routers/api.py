@@ -1,5 +1,6 @@
 import os, shutil, uuid
 from typing import List, Optional
+from app.models.notification import Notification
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
 from sqlalchemy.orm import Session, joinedload
 
@@ -11,15 +12,13 @@ from app.models.product import Product
 
 from app.schemas.schemas import (
     ProductOut, ProductUpdate,
-    OrderCreate, OrderOut, OrderStatusUpdate,
-    MessageCreate, MessageOut, ConversationOut,
     UserOut, UserUpdate,
 )
 from app.services.email import send_order_notification_email
 
 # Users
 users_router = APIRouter(prefix="/users", tags=["users"])
-
+notification_router = APIRouter(prefix="/notifications", tags=["notifications"])
 
 @users_router.get("/me", response_model=UserOut)
 def get_me(current_user: User = Depends(get_current_user)):
@@ -179,3 +178,8 @@ def delete_product(
         raise HTTPException(status_code=404, detail="Product not found")
     product.is_active = False
     db.commit()
+
+@notification_router.get("/")
+def get_notifications(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    return db.query(Notification).filter(Notification.user_id == current_user.id).order_by(Notification.created_at.desc()).all()
+

@@ -1,217 +1,285 @@
+import { useAuth } from "@/components/context/AuthContext";
+import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useRouter } from "expo-router";
+import { useCallback, useEffect, useState } from "react";
 import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
+  ActivityIndicator,
   Alert,
+  RefreshControl,
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
-import { useAuth } from "@/components/context/AuthContext";
 
-// ─── Menu Row ─────────────────────────────────────────────────────────────────
-function MenuRow({
-  emoji,
-  label,
-  subtitle,
-  onPress,
-  danger = false,
-  rightText,
-}: {
-  emoji: string;
-  label: string;
-  subtitle?: string;
-  onPress: () => void;
-  danger?: boolean;
-  rightText?: string;
-}) {
-  return (
-    <TouchableOpacity
-      onPress={onPress}
-      activeOpacity={0.7}
-      className="flex-row items-center py-3.5 border-b border-[#F0FAF4]"
-    >
-      {/* Icon */}
-      <View
-        className={`w-[38px] h-[38px] rounded-xl items-center justify-center mr-3.5 ${
-          danger ? "bg-red-50" : "bg-[#F0FAF4]"
-        }`}
-      >
-        <Text className="text-lg">{emoji}</Text>
+// --- Configuration ---
+const API_URL = "http://172.20.10.2:8000";
+
+export default function CustomerProfileScreen() {
+  const { logout } = useAuth();
+  const router = useRouter();
+
+  const [user, setUser] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+const fetchProfile = async () => {
+  console.log("Profile Fetch Started...");
+  try {
+    const token = await AsyncStorage.getItem("nebo_token");
+    
+    // Explicitly using the IP string to avoid variable issues
+    const response = await fetch(`${API_URL}/auth/me`, {
+      method: "GET",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    const data = await response.json();
+    console.log("SUCCESS! Backend said:", data);
+    setUser(data);
+  } catch (err: any) {
+    console.error("NETWORK ERROR:", err.message);
+    // This alert helps you debug on the physical screen
+    Alert.alert("Network Failed", `Tried: ${API_URL}/auth/me. Check your IP!`);
+  } finally {
+    setLoading(false);
+  }
+};
+
+
+  useEffect(() => {
+    fetchProfile();
+  }, []);
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    fetchProfile();
+  }, []);
+
+  const handleLogout = () => {
+    Alert.alert("Sign Out", "Are you sure you want to log out?", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Log Out", style: "destructive", onPress: logout },
+    ]);
+  };
+
+  if (loading) {
+    return (
+      <View className="flex-1 bg-[#F0FAF4] items-center justify-center">
+        <ActivityIndicator size="large" color="#1B4332" />
       </View>
+    );
+  }
 
-      {/* Text */}
-      <View className="flex-1">
-        <Text className={`text-sm font-semibold ${danger ? "text-red-600" : "text-[#1B4332]"}`}>
-          {label}
-        </Text>
-        {subtitle && (
-          <Text className="text-[11px] color-[#95D5B2] mt-0.5">{subtitle}</Text>
-        )}
-      </View>
-
-      {rightText && (
-        <Text className="text-[#52B788] text-xs font-semibold mr-2">
-          {rightText}
-        </Text>
-      )}
-
-      <Text className={`text-xl font-light ${danger ? "text-red-300" : "text-[#D8F3DC]"}`}>›</Text>
-    </TouchableOpacity>
-  );
-}
-
-// ─── Section ──────────────────────────────────────────────────────────────────
-function Section({ title, children }: { title?: string; children: React.ReactNode }) {
   return (
-    <View className="bg-white rounded-[20px] px-4 mb-3">
-      {title ? (
-        <Text className="text-[#95D5B2] text-[10px] font-bold uppercase tracking-[1.5px] pt-3.5 pb-1">
-          {title}
-        </Text>
-      ) : null}
-      {children}
-      <View className="h-0.5" />
+    <View className="flex-1 bg-[#F0FAF4]">
+      <SafeAreaView className="flex-1" edges={["top"]}>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 40 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor="#1B4332"
+            />
+          }
+        >
+          {/* Header */}
+          <View className="flex-row justify-between items-center px-6 pt-6 pb-4">
+            <Text className="text-[#1B4332] text-[36px] font-black tracking-tighter">
+              NeBo
+            </Text>
+            <TouchableOpacity
+              onPress={() => router.push("/notifications")}
+              className="w-12 h-12 bg-white rounded-full items-center justify-center shadow-sm border border-[#D8F3DC]"
+            >
+              <Ionicons
+                name="notifications-outline"
+                size={24}
+                color="#1B4332"
+              />
+              {/* Notification Dot */}
+              <View className="absolute top-3 right-3 w-3 h-3 bg-red-500 rounded-full border-2 border-white" />
+            </TouchableOpacity>
+          </View>
+
+          {/* Customer Hero Card */}
+          <View className="mx-6 bg-[#1B4332] rounded-[32px] p-6 mb-5 shadow-xl">
+            <View className="flex-row items-center mb-6">
+              <View className="w-[70px] h-[70px] rounded-full bg-[#2D6A4F] items-center justify-center mr-4 border-2 border-[#52B788]">
+                <Text className="text-[35px]">👤</Text>
+              </View>
+              <View className="flex-1">
+                <Text
+                  className="text-white font-black text-xl"
+                  numberOfLines={1}
+                >
+                  {user?.full_name || "Customer"}
+                </Text>
+                <Text className="text-[#95D5B2] text-xs font-semibold">
+                  {user?.email}
+                </Text>
+                <TouchableOpacity
+                  onPress={() => router.push("/(tabs)/profile/edit")}
+                  className="self-start bg-[#40916C] rounded-full px-4 py-1.5 mt-2 flex-row items-center"
+                >
+                  <Ionicons name="pencil" size={10} color="white" />
+                  <Text className="text-white text-[10px] font-black uppercase tracking-widest ml-1">
+                    Edit Profile
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Hero Card Stats Bar */}
+            <View className="flex-row bg-[#2D6A4F] rounded-[22px] py-4 px-2">
+              <View className="flex-1 items-center border-r border-[#1B4332]">
+                <Text className="text-white font-black text-lg">
+                  {user?.total_orders ?? "0"}
+                </Text>
+                <Text className="text-[#95D5B2] text-[9px] font-black uppercase">
+                  Orders Placed
+                </Text>
+              </View>
+
+              <View className="flex-1 items-center">
+                <Text
+                  className="text-white font-black text-lg"
+                  numberOfLines={1}
+                >
+                  {user?.location?.split(",")[0] || "No Address"}
+                </Text>
+                <Text className="text-[#95D5B2] text-[9px] font-black uppercase">
+                  Location
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Core Customer Links */}
+          <View className="px-6 mb-6">
+            <TouchableOpacity
+              onPress={() => router.push("/orders")}
+              activeOpacity={0.8}
+              className="bg-[#2D6A4F] rounded-[24px] p-6 shadow-sm flex-row items-center justify-between"
+            >
+              <View className="flex-row items-center">
+                <View className="bg-[#40916C] p-3 rounded-2xl mr-4">
+                  <Ionicons name="receipt-outline" size={28} color="white" />
+                </View>
+                <View>
+                  <Text className="text-white font-black text-lg">
+                    My Orders
+                  </Text>
+                  <Text className="text-white/60 text-xs">
+                    View history & tracking
+                  </Text>
+                </View>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="white" />
+            </TouchableOpacity>
+          </View>
+
+          {/* Menu Sections */}
+          <View className="px-6">
+            <Section title="Settings">
+              <MenuRow
+                emoji="👤"
+                label="Account Settings"
+                subtitle="Change password & email"
+                onPress={() => router.push("/(tabs)/profile/edit")}
+              />
+              <MenuRow
+                emoji="📍"
+                label="Address"
+                subtitle={user?.location || "No address saved"}
+                onPress={() => router.push("/(tabs)/profile/edit")}
+              />
+              <MenuRow
+                emoji="🔔"
+                label="Notifications"
+                subtitle="Alerts & messaging"
+                onPress={() => router.push("/notifications")}
+              />
+            </Section>
+
+            <Section title="Support">
+              <MenuRow
+                emoji="🎧"
+                label="Help & Support"
+                subtitle="Get help with your orders"
+                onPress={() => {}}
+              />
+              <MenuRow
+                emoji="🛡️"
+                label="Privacy & Security"
+                onPress={() => {}}
+              />
+            </Section>
+
+            <Section>
+              <MenuRow
+                emoji="🚪"
+                label="Sign Out"
+                onPress={handleLogout}
+                danger
+              />
+            </Section>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
     </View>
   );
 }
 
-// ─── Profile Screen ───────────────────────────────────────────────────────────
-export default function ProfileScreen() {
-  const { role, logout } = useAuth();
-  const router = useRouter();
-
-  const user = {
-    name: role === "farmer" ? "Jean-Pierre Nkomo" : "Amina Oumarou",
-    email: role === "farmer" ? "jp.nkomo@email.com" : "amina.o@email.com",
-    location: role === "farmer" ? "Bafoussam, West Region" : "Yaoundé, Centre",
-    avatar: role === "farmer" ? "👨‍🌾" : "👩‍🛍️",
-    memberSince: "March 2025",
-    ordersCount: 12,
-  };
-
-  const handleLogout = () => {
-    Alert.alert("Log out", "Are you sure you want to log out of NEBO?", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Log out", style: "destructive", onPress: logout },
-    ]);
-  };
-
-  const handleSwitchRole = () => {
-    Alert.alert(
-      "Switch role",
-      `You're signed in as a ${role}. This will log you out.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        { text: "Switch & log out", style: "destructive", onPress: logout },
-      ]
-    );
-  };
-
+// --- Helper UI Components ---
+function MenuRow({ emoji, label, subtitle, onPress, danger = false }: any) {
   return (
-    <View className="flex-1 bg-[#F0FAF4]">
-      <SafeAreaView className="flex-1">
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
-          
-          {/* Header */}
-          <View className="px-5 pt-5 pb-4">
-            <Text className="text-[#1B4332] text-[32px] font-black tracking-tighter">
-              Profile
-            </Text>
-          </View>
+    <TouchableOpacity
+      onPress={onPress}
+      activeOpacity={0.7}
+      className="flex-row items-center py-4 border-b border-[#F0FAF4]"
+    >
+      <View
+        className={`w-10 h-10 rounded-2xl items-center justify-center mr-4 ${danger ? "bg-red-50" : "bg-[#F0FAF4]"}`}
+      >
+        <Text className="text-lg">{emoji}</Text>
+      </View>
+      <View className="flex-1">
+        <Text
+          className={`text-[15px] font-bold ${danger ? "text-red-600" : "text-[#1B4332]"}`}
+        >
+          {label}
+        </Text>
+        {subtitle && (
+          <Text className="text-[11px] text-[#95D5B2] mt-0.5">{subtitle}</Text>
+        )}
+      </View>
+      <Ionicons
+        name="chevron-forward"
+        size={16}
+        color={danger ? "#FCA5A5" : "#D8F3DC"}
+      />
+    </TouchableOpacity>
+  );
+}
 
-          {/* Profile Hero Card */}
-          <View className="mx-5 bg-[#1B4332] rounded-3xl p-5 mb-3">
-            <View className="flex-row items-center">
-              {/* Avatar */}
-              <View className="w-[68px] h-[68px] rounded-[20px] bg-[#2D6A4F] items-center justify-center mr-4">
-                <Text className="text-[34px]">{user.avatar}</Text>
-              </View>
-
-              {/* Name + Role */}
-              <View className="flex-1">
-                <Text className="text-white font-extrabold text-[17px]" numberOfLines={1}>
-                  {user.name}
-                </Text>
-                <Text className="text-[#52B788] text-xs mt-0.5">{user.email}</Text>
-                <View className="self-start bg-[#2D6A4F] rounded-full px-2.5 py-1 mt-2">
-                  <Text className="text-[#95D5B2] text-[11px] font-bold capitalize">
-                    {role}
-                  </Text>
-                </View>
-              </View>
-
-              {/* Edit Button */}
-              <TouchableOpacity className="bg-[#2D6A4F] rounded-xl px-3.5 py-2">
-                <Text className="text-[#95D5B2] text-xs font-bold">Edit</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Stats Row */}
-            <View className="flex-row mt-5 bg-[#2D6A4F] rounded-2xl overflow-hidden">
-              {[
-                { label: "Orders", value: String(user.ordersCount) },
-                { label: "Location", value: user.location.split(",")[0] },
-                { label: "Member since", value: user.memberSince.split(" ")[1] },
-              ].map((stat, i) => (
-                <View
-                  key={i}
-                  className={`flex-1 items-center py-3 ${i < 2 ? "border-r border-[#1B4332]" : ""}`}
-                >
-                  <Text className="text-white font-extrabold text-[15px]">{stat.value}</Text>
-                  <Text className="text-[#52B788] text-[10px] mt-0.5">{stat.label}</Text>
-                </View>
-              ))}
-            </View>
-          </View>
-
-          {/* Menu Sections */}
-          <View className="px-5">
-            <Section title="Account">
-              <MenuRow emoji="✏️" label="Edit profile" subtitle="Name, phone and location" onPress={() => {}} />
-              <MenuRow emoji="🔒" label="Change password" subtitle="Keep your account secure" onPress={() => {}} />
-              <MenuRow emoji="📍" label="Delivery address" subtitle={user.location} onPress={() => {}} />
-            </Section>
-
-            <Section title="Activity">
-              <MenuRow
-                emoji="📦"
-                label="My orders"
-                subtitle="View your order history"
-                rightText={`${user.ordersCount}`}
-                onPress={() => router.push("/(tabs)/(customer-tabs)/orders")}
-              />
-              {role === "farmer" && (
-                <MenuRow
-                  emoji="🌾"
-                  label="My products"
-                  subtitle="Manage your listings"
-                  onPress={() => router.push("/")}
-                />
-              )}
-            </Section>
-
-            <Section title="Preferences">
-              <MenuRow emoji="🔔" label="Notifications" subtitle="Manage push alerts" onPress={() => {}} />
-              <MenuRow emoji="🌐" label="Language" subtitle="English" onPress={() => {}} />
-            </Section>
-
-            <Section title="More">
-              <MenuRow emoji="🔄" label="Switch role" subtitle={`Currently: ${role}`} onPress={handleSwitchRole} />
-              <MenuRow emoji="❓" label="Help & support" onPress={() => {}} />
-              <MenuRow emoji="📄" label="Terms & Privacy" onPress={() => {}} />
-            </Section>
-
-            <Section>
-              <MenuRow emoji="🚪" label="Log out" onPress={handleLogout} danger />
-            </Section>
-
-            <Text className="text-center text-[#95D5B2] text-[11px] mt-2 mb-10">
-              NEBO v1.0.0 · Made with 🌿
-            </Text>
-          </View>
-        </ScrollView>
-      </SafeAreaView>
+function Section({ title, children }: any) {
+  return (
+    <View className="bg-white rounded-[28px] px-5 mb-4 shadow-sm border border-[#D8F3DC]">
+      {title && (
+        <Text className="text-[#95D5B2] text-[10px] font-black uppercase tracking-[2px] pt-5 pb-1">
+          {title}
+        </Text>
+      )}
+      {children}
+      <View className="h-2" />
     </View>
   );
 }

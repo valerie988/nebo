@@ -28,7 +28,6 @@ function formatTime(iso: string): string {
   return date.toLocaleDateString("en", { day: "numeric", month: "short" });
 }
 
-// ─── Avatar Letter ────────────────────────────────────────────────────────────
 function Avatar({ name, role }: { name: string; role: "farmer" | "customer" }) {
   const initials = name
     .split(" ")

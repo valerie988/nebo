@@ -64,18 +64,17 @@ function CustomTabBar({ state, navigation }: any) {
     </View>
   );
 }
-
 export default function CustomerTabsLayout() {
   return (
     <Tabs
       tabBar={(props) => <CustomTabBar {...props} />}
       screenOptions={{ headerShown: false }}
     >
-      <Tabs.Screen name="home" />
-      <Tabs.Screen name="marketplace" />
-      <Tabs.Screen name="orders" />
-      <Tabs.Screen name="chat" />
-      <Tabs.Screen name="profile" />
+      <Tabs.Screen name="home" options={{ title: "Home" }} />
+      <Tabs.Screen name="marketplace" options={{ title: "Market" }} />
+      <Tabs.Screen name="orders" options={{ title: "Orders" }} />
+      <Tabs.Screen name="chat" options={{ title: "Chat" }} />
+      <Tabs.Screen name="profile" options={{ title: "Profile" }} />
     </Tabs>
   );
 }

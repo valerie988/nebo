@@ -16,7 +16,7 @@ import { FieldInput, PasswordInput } from "@/components/auth/AuthUI";
 import { useAuth } from "@/components/context/AuthContext";
 import { authService } from "@/components/services/authService";
 
-// ─── TYPES ────────────────────────────────────────────────────────────────────
+// ─── TYPES 
 interface FormProps {
   values: Record<string, string>;
   onChange: (field: string, val: string) => void;
