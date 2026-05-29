@@ -1,36 +1,41 @@
-
 import axios from 'axios';
+import Constants from 'expo-constants';
 
-const API_URL = "http://172.20.10.2:8000"; 
+// Cleanly connect from app.config.js with a fallback to your current verified IP
+const BASE_URL = Constants.expoConfig?.extra?.API_URL;
 
 export const authService = {
+  login: async (credentials: any) => {
+    try {
+      const payload = {
+        email: credentials.email,    
+        password: credentials.password,
+        role: credentials.role || "customer" 
+      };
 
-
-login: async (credentials: any) => {
-  try {
-    const payload = {
-      email: credentials.email,    
-      password: credentials.password,
-      role: credentials.role || "customer" 
-    };
-
-    const response = await axios.post(`${API_URL}/auth/login`, payload);
-    return response.data;
-  } catch (error: any) {
-    // This helps you see the actual message instead of [object Object]
-    const message = error.response?.data?.detail 
-      ? (typeof error.response.data.detail === 'string' 
-          ? error.response.data.detail 
-          : JSON.stringify(error.response.data.detail))
-      : error.message;
+      // Notice we use BASE_URL and append /api/auth/login if your FastAPI router uses the /api prefix
+      console.log(`📡 Sending login request to: ${BASE_URL}/api/auth/login`);
       
-    throw new Error(message);
-  }
-},
+      const response = await axios.post(`${BASE_URL}/api/auth/login`, payload);
+      return response.data;
+    } catch (error: any) {
+      console.error("❌ Login Error Response Object:", error.response?.data);
+      
+      const message = error.response?.data?.detail 
+        ? (typeof error.response.data.detail === 'string' 
+            ? error.response.data.detail 
+            : JSON.stringify(error.response.data.detail))
+        : error.message;
+        
+      throw new Error(message);
+    }
+  },
 
   signup: async (userData: any) => {
     try {
-      const response = await axios.post(`${API_URL}/auth/signup`, {
+      console.log(`📡 Sending signup request to: ${BASE_URL}/api/auth/signup`);
+
+      const response = await axios.post(`${BASE_URL}/api/auth/signup`, {
         full_name: userData.full_name,
         email: userData.email,
         password: userData.password,

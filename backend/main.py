@@ -1,7 +1,7 @@
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-import os
 
 from app.core.database import Base, engine
 from app.core.config import settings
@@ -10,11 +10,13 @@ from app.routers.api import (
     users_router,
     products_router,
 )
-
-# Create tables
+# FIXED: Changed 'router' to 'admin_router' to match your app/routers/admin.py variable!
+from app.routers.admin import admin_router
+from routers import orders
+# 1. Automatically generate your MySQL database tables on startup
 Base.metadata.create_all(bind=engine)
 
-# Create upload directory
+# 2. Create local upload directory for product imagery
 os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 
 app = FastAPI(
@@ -23,7 +25,7 @@ app = FastAPI(
     version="1.0.0",
 )
 
-#  CORS 
+# 3. CORS Middleware configuration so your apps can connect without security blocks
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],   
@@ -32,16 +34,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-#  Static files (uploaded product photos) 
+# 4. Static files hosting (for uploaded product photos) 
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
-#  Routers 
-app.include_router(auth_router)
-app.include_router(users_router)
-app.include_router(products_router)
+# 5. Centralized API Routers
+app.include_router(auth_router, prefix="/api")
+app.include_router(users_router, prefix="/api")
+app.include_router(products_router, prefix="/api")
+# FIXED: Using the properly named admin_router variable here
+app.include_router(admin_router, prefix="/api")
+app.include_router(orders.router, prefix="/orders", tags=["orders"])
 
-
-#  Health check
+# 6. Health check endpoints
 @app.get("/health", tags=["health"])
 def health():
     return {"status": "ok", "app": "NEBO API"}

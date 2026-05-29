@@ -12,10 +12,10 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
 
-    # Email
-    MAIL_USERNAME: str
-    MAIL_PASSWORD: str
-    MAIL_FROM: str
+    # Email (🌿 Safe fallbacks added to prevent validation blockages)
+    MAIL_USERNAME: str = ""
+    MAIL_PASSWORD: str = ""
+    MAIL_FROM: str = ""
     MAIL_PORT: int = 587
     MAIL_SERVER: str = "smtp.gmail.com"
     MAIL_FROM_NAME: str = "NEBO App"
@@ -25,6 +25,11 @@ class Settings(BaseSettings):
     FRONTEND_URL: str = "exp://localhost:8081"
     UPLOAD_DIR: str = "uploads/products"
     MAX_UPLOAD_SIZE_MB: int = 5
+
+    #ADDED CLOUDINARY CONFIGURATION PROPERTIES (With defaults)
+    CLOUDINARY_CLOUD_NAME: str = ""
+    CLOUDINARY_API_KEY: str = ""
+    CLOUDINARY_API_SECRET: str = ""
 
     class Config:
         env_file = ".env"

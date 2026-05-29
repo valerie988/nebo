@@ -7,6 +7,7 @@ import {
     ActivityIndicator,
     Alert,
     Image,
+    Platform,
     ScrollView,
     Text,
     TextInput,
@@ -14,15 +15,16 @@ import {
     View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import Constants from "expo-constants";
 
-const API_URL = "http://172.20.10.2:8000";
+// Read the dynamic API configuration configuration setup
+const API_URL = Constants.expoConfig?.extra?.API_URL;
 
 export default function EditProfileScreen() {
   const [image, setImage] = useState<string | null>(null);
 
   // Function to handle image picking
   const pickImage = async () => {
-    // Request permission first
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
     if (status !== "granted") {
@@ -33,19 +35,18 @@ export default function EditProfileScreen() {
       return;
     }
 
-    // Launch the picker
     let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"], // Updated for newer expo versions
+      mediaTypes: ["images"], 
       allowsEditing: true,
       aspect: [1, 1],
-      quality: 0.5, // Lower quality for faster upload
+      quality: 0.5, 
     });
 
     if (!result.canceled) {
       setImage(result.assets[0].uri);
-      // You would typically upload this to the backend here
     }
   };
+  
   const { token } = useAuth();
   const router = useRouter();
 
@@ -64,9 +65,7 @@ export default function EditProfileScreen() {
     const fetchCurrentData = async () => {
       try {
         const fullUrl = `${API_URL}/auth/me`;
-        console.log("Fetching from:", fullUrl); // DEBUG 1: Check the URL
-        console.log("Using Token:", token ? "Yes" : "No"); // DEBUG 2: Check token
-
+        
         const res = await fetch(fullUrl, {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -84,13 +83,16 @@ export default function EditProfileScreen() {
             email: data.email || "",
             role: data.role || "",
           });
+          // If the backend drops an absolute path profile image link, sync it over
+          if (data.profile_pic) {
+             setImage(data.profile_pic);
+          }
         } else {
-          console.error("Server Error Response:", data); // DEBUG 3: See backend error
           Alert.alert("Error", `Server returned ${res.status}`);
         }
       } catch (err) {
-        console.error("Fetch Error:", err); // DEBUG 4: Check for Network Error
         Alert.alert("Error", "Check terminal for network error details");
+        console.error("Fetch Error:", err);
       } finally {
         setLoading(false);
       }
@@ -102,29 +104,45 @@ export default function EditProfileScreen() {
   const handleUpdate = async () => {
     setSaving(true);
     try {
+      const formData = new FormData();
+      formData.append("full_name", form.full_name);
+      formData.append("phone", form.phone);
+      formData.append("location", form.location);
+
+      // Verify if a brand new image stream was picked locally (starts with 'file://' or 'ph://')
+      if (image && (image.startsWith("file://") || image.startsWith("content://"))) {
+        const filename = image.split("/").pop();
+        const match = /\.(\w+)$/.exec(filename || "");
+        const type = match ? `image/${match[1]}` : `image/jpeg`;
+
+        formData.append("profile_pic", {
+          uri: Platform.OS === "ios" ? image.replace("file://", "") : image,
+          name: filename || "profile.jpg",
+          type,
+        } as any);
+      }
+
       const res = await fetch(`${API_URL}/auth/update`, {
         method: "PATCH",
         headers: {
           Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
+          Accept: "application/json",
+          // Leaving Content-Type out allows fetch to handle file boundaries cleanly
         },
-        body: JSON.stringify({
-          full_name: form.full_name,
-          phone: form.phone,
-          location: form.location,
-        }),
+        body: formData,
       });
 
       if (res.ok) {
-        Alert.alert("Success", "Profile updated!", [
+        Alert.alert("Success ✨", "Profile updated!", [
           { text: "OK", onPress: () => router.back() },
         ]);
       } else {
-        Alert.alert("Update Failed", "Check your inputs.");
+        const errorJson = await res.json();
+        Alert.alert("Update Failed", errorJson.detail || "Check your inputs.");
       }
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     } catch (err) {
-      Alert.alert("Error", "Network error");
+      Alert.alert("Error", "Network connection failed");
+      console.error("Profile saving error: ", err);
     } finally {
       setSaving(false);
     }

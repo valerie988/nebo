@@ -1,16 +1,16 @@
-import {
-  View,
-  Text,
-  FlatList,
-  TouchableOpacity,
-  TextInput,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
-import {  useState, useCallback } from "react";
-import { useFocusEffect } from "@react-navigation/native";
 import { useAuth } from "@/components/context/AuthContext";
 import { chatService, Conversation } from "@/components/services/chatService";
+import { useFocusEffect } from "@react-navigation/native";
+import { useRouter } from "expo-router";
+import { useCallback, useState } from "react";
+import {
+  FlatList,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 // ─── Format timestamp 
 function formatTime(iso: string): string {

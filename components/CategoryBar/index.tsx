@@ -1,4 +1,4 @@
-import { ScrollView, TouchableOpacity, Text, View } from "react-native";
+import { ScrollView, Text, TouchableOpacity, View } from "react-native";
 
 const CATEGORIES = [
   { id: "1", label: "All", emoji: "✨" },

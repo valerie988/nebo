@@ -1,28 +1,14 @@
-import {
-  View,
-  Text,
-  FlatList,
-  TouchableOpacity,
-} from "react-native";
+import { useEffect, useState } from "react";
+import { ActivityIndicator, FlatList, Text, TouchableOpacity, View, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useState } from "react";
+import Constants from "expo-constants";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Ionicons } from "@expo/vector-icons";
 
+const API_URL = Constants.expoConfig?.extra?.API_URL;
+
+// --- Constants ---
 type OrderStatus = "delivered" | "in_transit" | "processing" | "cancelled";
-
-const ORDERS: {
-  id: string;
-  items: string;
-  farmer: string;
-  total: number;
-  date: string;
-  status: OrderStatus;
-  emoji: string;
-}[] = [
-  { id: "ORD-001", items: "Tomatoes × 2kg, Spinach × 1 bunch",      farmer: "Nkomo Farm",     total: 1250, date: "Today, 10:32 AM",    status: "in_transit", emoji: "🍅" },
-  { id: "ORD-002", items: "Sweet Plantains × 3 bunches",             farmer: "Green Valley",   total: 900,  date: "Yesterday, 3:15 PM", status: "delivered",  emoji: "🍌" },
-  { id: "ORD-003", items: "Organic Carrots × 1kg, Ginger × 500g",   farmer: "Biya Roots",     total: 700,  date: "Mar 22, 11:00 AM",  status: "delivered",  emoji: "🥕" },
-
-];
 
 const STATUS_THEME: Record<OrderStatus, { label: string; text: string; bg: string }> = {
   delivered:  { label: "Delivered",  text: "text-green-800", bg: "bg-green-100" },
@@ -39,98 +25,80 @@ const FILTERS: { label: string; value: OrderStatus | "all" }[] = [
   { label: "Cancelled",  value: "cancelled" },
 ];
 
-// ─── Order Card ───────────────────────────────────────────────────────────────
-function OrderCard({ order }: { order: (typeof ORDERS)[0] }) {
-  const theme = STATUS_THEME[order.status];
+// --- Order Card Component ---
+function OrderCard({ order }: { order: any }) {
+  const theme = STATUS_THEME[order.status as OrderStatus] || STATUS_THEME.processing;
 
   return (
-    <View className="bg-white rounded-[20px] p-4 mb-2.5">
-      {/* Top Section */}
+    <View className="bg-white rounded-[20px] p-4 mb-2.5 border border-[#F0FAF4]">
       <View className="flex-row items-center justify-between mb-3">
         <View className="flex-row items-center">
           <View className="w-11 h-11 rounded-xl bg-[#F0FAF4] items-center justify-center mr-3">
-            <Text className="text-2xl">{order.emoji}</Text>
+            <Text className="text-2xl">📦</Text>
           </View>
           <View>
             <Text className="text-[#1B4332] font-bold text-sm">{order.id}</Text>
             <Text className="text-[#95D5B2] text-[11px] mt-0.5">{order.date}</Text>
           </View>
         </View>
-
-        {/* Status Pill */}
         <View className={`${theme.bg} rounded-full px-2.5 py-1`}>
           <Text className={`${theme.text} text-[11px] font-bold`}>{theme.label}</Text>
         </View>
       </View>
-
-      {/* Items Summary */}
-      <Text className="text-[#52B788] text-xs leading-5" numberOfLines={1}>
-        {order.items}
-      </Text>
-
-      {/* Bottom Divider & Price */}
+      <Text className="text-[#52B788] text-xs leading-5" numberOfLines={1}>{order.items}</Text>
       <View className="flex-row items-center justify-between mt-3 pt-3 border-t border-[#F0FAF4]">
-        <Text className="text-[#B7E4C7] text-xs">
-          From <Text className="text-[#52B788] font-semibold">{order.farmer}</Text>
-        </Text>
+        <Text className="text-[#B7E4C7] text-xs">From <Text className="text-[#52B788] font-semibold">{order.farmer}</Text></Text>
         <Text className="text-[#1B4332] font-extrabold text-[15px]">
-          {order.total.toLocaleString()} <Text className="text-[#95D5B2] font-normal text-[11px]">XAF</Text>
+          {Number(order.total).toLocaleString()} <Text className="text-[#95D5B2] font-normal text-[11px]">XAF</Text>
         </Text>
       </View>
-
-      {/* Reorder Button */}
-      {order.status === "delivered" && (
-        <TouchableOpacity
-          activeOpacity={0.8}
-          className="mt-2.5 rounded-xl py-2.5 items-center bg-[#F0FAF4]"
-        >
-          <Text className="text-[#1B4332] text-[13px] font-bold">Reorder →</Text>
-        </TouchableOpacity>
-      )}
     </View>
   );
 }
 
-// ─── Orders Screen
+// --- Main Screen ---
 export default function OrdersScreen() {
-  const [activeFilter, setActiveFilter] = useState<OrderStatus | "all">("all");
+  const [orders, setOrders] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [activeFilter, setActiveFilter] = useState<any>("all");
 
-  const filtered = activeFilter === "all" 
-    ? ORDERS 
-    : ORDERS.filter((o) => o.status === activeFilter);
+  const fetchOrders = async () => {
+    try {
+      const token = await AsyncStorage.getItem("nebo_token");
+      const response = await fetch(`${API_URL}/orders`, {
+        headers: { "Authorization": `Bearer ${token}` },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setOrders(data);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const inTransitCount = ORDERS.filter((o) => o.status === "in_transit").length;
+  useEffect(() => { fetchOrders(); }, []);
+
+  const filtered = activeFilter === "all" ? orders : orders.filter((o) => o.status === activeFilter);
+  const inTransitCount = orders.filter((o) => o.status === "in_transit").length;
+
+  if (loading) {
+    return (
+      <View className="flex-1 bg-[#F0FAF4] items-center justify-center">
+        <ActivityIndicator size="large" color="#1B4332" />
+      </View>
+    );
+  }
 
   return (
     <View className="flex-1 bg-[#F0FAF4]">
       <SafeAreaView className="flex-1">
-
-        {/* Header */}
         <View className="px-5 pt-5 pb-4">
-          <Text className="text-[#1B4332] text-[32px] font-black tracking-tighter">
-            My Orders
-          </Text>
-          <Text className="text-[#52B788] text-[13px] font-medium mt-0.5">
-            {ORDERS.length} total · {inTransitCount} on the way
-          </Text>
+          <Text className="text-[#1B4332] text-[32px] font-black tracking-tighter">My Orders</Text>
         </View>
 
-        {/* Active Order Banner */}
-        {inTransitCount > 0 && (
-          <View className="mx-5 mb-4 bg-[#1B4332] rounded-[20px] px-[18px] py-3.5 flex-row items-center justify-between">
-            <View>
-              <Text className="text-[#95D5B2] text-[11px] font-bold uppercase tracking-widest">
-                On the way
-              </Text>
-              <Text className="text-white font-bold text-sm mt-0.5">
-                {inTransitCount} order{inTransitCount > 1 ? "s" : ""} in transit
-              </Text>
-            </View>
-            <Text className="text-3xl">🚚</Text>
-          </View>
-        )}
-
-        {/* Filters List */}
         <View className="h-10 mb-3.5">
           <FlatList
             data={FILTERS}
@@ -141,16 +109,9 @@ export default function OrdersScreen() {
             renderItem={({ item }) => (
               <TouchableOpacity
                 onPress={() => setActiveFilter(item.value)}
-                activeOpacity={0.8}
-                className={`rounded-full px-[18px] justify-center h-full ${
-                  activeFilter === item.value ? "bg-[#1B4332]" : "bg-white"
-                }`}
+                className={`rounded-full px-[18px] justify-center h-full ${activeFilter === item.value ? "bg-[#1B4332]" : "bg-white"}`}
               >
-                <Text
-                  className={`text-[13px] font-semibold ${
-                    activeFilter === item.value ? "text-white" : "text-[#1B4332]"
-                  }`}
-                >
+                <Text className={`text-[13px] font-semibold ${activeFilter === item.value ? "text-white" : "text-[#1B4332]"}`}>
                   {item.label}
                 </Text>
               </TouchableOpacity>
@@ -158,23 +119,13 @@ export default function OrdersScreen() {
           />
         </View>
 
-        {/* Main Orders List */}
-        {filtered.length === 0 ? (
-          <View className="flex-1 items-center justify-center">
-            <Text className="text-5xl mb-3">📋</Text>
-            <Text className="text-[#1B4332] font-bold text-base">No orders here</Text>
-            <Text className="text-[#95D5B2] text-[13px] mt-1">Try a different filter</Text>
-          </View>
-        ) : (
-          <FlatList
-            data={filtered}
-            keyExtractor={(item) => item.id}
-            contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 32 }}
-            showsVerticalScrollIndicator={false}
-            renderItem={({ item }) => <OrderCard order={item} />}
-          />
-        )}
-
+        <FlatList
+          data={filtered}
+          keyExtractor={(item) => item.id.toString()}
+          contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 32 }}
+          ListEmptyComponent={<Text className="text-center mt-10 text-[#52B788]">No orders found.</Text>}
+          renderItem={({ item }) => <OrderCard order={item} />}
+        />
       </SafeAreaView>
     </View>
   );

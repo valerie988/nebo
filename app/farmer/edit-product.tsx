@@ -1,8 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import Constants from "expo-constants";
 import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -17,14 +18,15 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-const API_URL = "http://172.20.10.2:8000";
+// ✅ FIXED: Standardized URL generation matching your global layout architecture
+const BASE_URL = Constants.expoConfig?.extra?.API_URL;
 
 export default function EditProductScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const productId = params.id as string;
 
-  // Form States (now including description and location)
+  // Form States
   const [name, setName] = useState((params.name as string) || "");
   const [price, setPrice] = useState((params.price as string) || "");
   const [quantity, setQuantity] = useState((params.quantity as string) || "");
@@ -39,6 +41,18 @@ export default function EditProductScreen() {
   const [newImage, setNewImage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  //  Inline optimization process for the existing background product asset
+  const existingProductImageUri = useMemo(() => {
+    const originalUrl = params.image as string;
+    if (originalUrl && originalUrl.includes("/upload/")) {
+      return originalUrl.replace(
+        "/upload/",
+        "/upload/w_500,h_400,c_fill,q_auto/",
+      );
+    }
+    return originalUrl || null;
+  }, [params.image]);
+
   const pickImage = async () => {
     let result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -52,31 +66,50 @@ export default function EditProductScreen() {
   const handleUpdate = async () => {
     setLoading(true);
     try {
-      const token = await AsyncStorage.getItem("nebo_token");
+      const token =
+        (await AsyncStorage.getItem("nebo_token")) ||
+        (await AsyncStorage.getItem("token"));
 
-      // 1. Update Text Data (PATCH)
-      const updateData = {
-        name,
-        category,
-        unit,
-        description,
-        location,
-        price: parseFloat(price),
-        quantity: parseFloat(quantity),
-      };
+      const formData = new FormData();
+      formData.append("name", name);
+      formData.append("category", category);
+      formData.append("unit", unit);
+      formData.append("description", description);
+      formData.append("location", location);
+      formData.append("price", parseFloat(price).toString());
+      formData.append("quantity", parseFloat(quantity).toString());
 
-      const response = await fetch(`${API_URL}/products/${productId}`, {
+      if (newImage) {
+        const filename = newImage.split("/").pop();
+        const match = /\.(\w+)$/.exec(filename || "");
+        const type = match ? `image/${match[1]}` : `image`;
+
+        formData.append("file", {
+          uri:
+            Platform.OS === "ios" ? newImage.replace("file://", "") : newImage,
+          name: filename || "photo.jpg",
+          type,
+        } as any);
+      }
+
+      const targetEndpoint = `${BASE_URL}/api/products/${productId}`;
+      console.log(` Sending dynamic PATCH update to: ${targetEndpoint}`);
+
+      const response = await fetch(targetEndpoint, {
         method: "PATCH",
         headers: {
-          "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
+          // Note: Leave Content-Type header blank for FormData so boundary markers inject correctly
         },
-        body: JSON.stringify(updateData),
+        body: formData,
       });
 
       if (response.ok) {
         Alert.alert("Success ✨", "Listing updated!");
         router.back();
+      } else {
+        const errorData = await response.json();
+        Alert.alert("Error", errorData.detail || "Failed to update item.");
       }
     } catch (err) {
       Alert.alert("Error", "Could not save changes.");
@@ -98,7 +131,7 @@ export default function EditProductScreen() {
             showsVerticalScrollIndicator={false}
           >
             {/* Header */}
-            <View className="flex-row items-center mb-4">
+            <View className="flex-row items-center mb-5">
               <TouchableOpacity
                 onPress={() => router.back()}
                 className="w-10 h-10 bg-white rounded-full items-center justify-center border border-[#D8F3DC]"
@@ -110,13 +143,18 @@ export default function EditProductScreen() {
               </Text>
             </View>
 
-            {/* Image Selector */}
-            <TouchableOpacity onPress={pickImage} className="mb-4">
+            {/* Image Selector Container Frame */}
+            <TouchableOpacity
+              onPress={pickImage}
+              className="mb-5"
+              activeOpacity={0.9}
+            >
               <View className="w-full h-44 bg-white rounded-[32px] border-2 border-dashed border-[#B7E4C7] overflow-hidden items-center justify-center">
-                {newImage || params.image ? (
+                {newImage || existingProductImageUri ? (
                   <Image
-                    source={{ uri: newImage || (params.image as string) }}
+                    source={{ uri: newImage || existingProductImageUri! }}
                     className="w-full h-full"
+                    resizeMode="cover"
                   />
                 ) : (
                   <View className="items-center">
@@ -129,10 +167,11 @@ export default function EditProductScreen() {
               </View>
             </TouchableOpacity>
 
-            <View className="bg-white rounded-[32px] p-6 border border-[#D8F3DC] shadow-sm space-y-4">
+            {/* Input fields panel wrapper */}
+            <View className="bg-white rounded-[32px] p-6 border border-[#D8F3DC] shadow-sm">
               {/* Basic Info */}
-              <View>
-                <Text className="text-[#95D5B2] text-[10px] font-black uppercase mb-2  ml-1">
+              <View className="mb-4">
+                <Text className="text-[#95D5B2] text-[10px] font-black uppercase mb-2 ml-1">
                   Product Name
                 </Text>
                 <TextInput
@@ -143,9 +182,9 @@ export default function EditProductScreen() {
               </View>
 
               {/* Price & Qty Row */}
-              <View className="flex-row justify-between">
+              <View className="flex-row justify-between mb-4">
                 <View className="w-[48%]">
-                  <Text className="text-[#95D5B2] text-[10px] font-black uppercase mb-2 mt-5 ml-1">
+                  <Text className="text-[#95D5B2] text-[10px] font-black uppercase mb-2 ml-1">
                     Price (XAF)
                   </Text>
                   <TextInput
@@ -156,7 +195,7 @@ export default function EditProductScreen() {
                   />
                 </View>
                 <View className="w-[48%]">
-                  <Text className="text-[#95D5B2] text-[10px] font-black uppercase mb-2 mt-5 ml-1">
+                  <Text className="text-[#95D5B2] text-[10px] font-black uppercase mb-2 ml-1">
                     Quantity
                   </Text>
                   <TextInput
@@ -167,9 +206,10 @@ export default function EditProductScreen() {
                   />
                 </View>
               </View>
-              {/* Category Input (Newly Added) */}
-              <View>
-                <Text className="text-[#95D5B2] text-[10px] font-black uppercase tracking-widest mb-2 mt-3 ml-1">
+
+              {/* Category Input */}
+              <View className="mb-4">
+                <Text className="text-[#95D5B2] text-[10px] font-black uppercase tracking-widest mb-2 ml-1">
                   Category
                 </Text>
                 <View className="flex-row items-center bg-[#F8FDF9] px-4 rounded-2xl border border-[#E9F7EF]">
@@ -178,14 +218,15 @@ export default function EditProductScreen() {
                     value={category}
                     onChangeText={setCategory}
                     placeholder="Vegetables, Grains, Tubers..."
+                    placeholderTextColor="#95D5B2"
                     className="flex-1 p-4 text-[#1B4332] font-semibold"
                   />
                 </View>
               </View>
 
-              {/* Unit Input (Newly Added) */}
-              <View>
-                <Text className="text-[#95D5B2] text-[10px] font-black uppercase tracking-widest mb-2 mt-4 ml-1">
+              {/* Unit Input */}
+              <View className="mb-4">
+                <Text className="text-[#95D5B2] text-[10px] font-black uppercase tracking-widest mb-2 ml-1">
                   Unit of Measurement
                 </Text>
                 <View className="flex-row items-center bg-[#F8FDF9] px-4 rounded-2xl border border-[#E9F7EF]">
@@ -194,14 +235,15 @@ export default function EditProductScreen() {
                     value={unit}
                     onChangeText={setUnit}
                     placeholder="kg, bucket, bag, crate..."
+                    placeholderTextColor="#95D5B2"
                     className="flex-1 p-4 text-[#1B4332] font-semibold"
                   />
                 </View>
               </View>
 
               {/* Location */}
-              <View>
-                <Text className="text-[#95D5B2] text-[10px] font-black uppercase mb-2 mt-5 ml-1">
+              <View className="mb-4">
+                <Text className="text-[#95D5B2] text-[10px] font-black uppercase mb-2 ml-1">
                   Pickup Location
                 </Text>
                 <View className="flex-row items-center bg-[#F8FDF9] px-4 rounded-2xl border border-[#E9F7EF]">
@@ -211,13 +253,14 @@ export default function EditProductScreen() {
                     onChangeText={setLocation}
                     className="flex-1 p-4 text-[#1B4332] font-semibold"
                     placeholder="e.g. Molyko, Buea"
+                    placeholderTextColor="#95D5B2"
                   />
                 </View>
               </View>
 
               {/* Description */}
               <View>
-                <Text className="text-[#95D5B2] text-[10px] font-black uppercase mb-2 mt-5 ml-1">
+                <Text className="text-[#95D5B2] text-[10px] font-black uppercase mb-2 ml-1">
                   Description
                 </Text>
                 <TextInput
@@ -227,6 +270,7 @@ export default function EditProductScreen() {
                   numberOfLines={3}
                   textAlignVertical="top"
                   placeholder="Tell buyers about your harvest..."
+                  placeholderTextColor="#95D5B2"
                   className="bg-[#F8FDF9] p-4 rounded-2xl text-[#1B4332] font-semibold border border-[#E9F7EF] h-24"
                 />
               </View>
@@ -234,7 +278,7 @@ export default function EditProductScreen() {
 
             <TouchableOpacity
               onPress={handleUpdate}
-              className="mt-8 bg-[#1B4332] p-5 rounded-[28px] items-center shadow-lg"
+              className="mt-6 bg-[#1B4332] p-5 rounded-[28px] items-center shadow-lg"
             >
               {loading ? (
                 <ActivityIndicator color="white" />

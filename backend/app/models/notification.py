@@ -1,17 +1,21 @@
-from sqlalchemy import Column, String, Text, Boolean, DateTime, ForeignKey
-from app.core.database import Base # Or wherever your Base is defined
-from datetime import datetime, timezone
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey
+from sqlalchemy.orm import relationship
+from datetime import datetime, timezone # <-- Make sure timezone is imported
+from app.core.database import Base
+
+# ADD THIS HELPER FUNCTION AT THE TOP:
+def utcnow():
+    return datetime.now(timezone.utc)
 
 class Notification(Base):
     __tablename__ = "notifications"
-    
-    # FIX: Add (36) or (255) to the String types
-    id = Column(String(36), primary_key=True, index=True)
-    user_id = Column(String(36), ForeignKey("users.id"))
-    title = Column(String(255))
-    
-    # Text usually doesn't need a length, but String/VARCHAR does
-    message = Column(Text) 
-    
-    is_read = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    id         = Column(Integer, primary_key=True, index=True)
+    user_id    = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    title      = Column(String(150), nullable=False)
+    message    = Column(String(500), nullable=False)
+    type       = Column(String(50), default="order")
+    is_read    = Column(Boolean, default=False)
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+
+    user       = relationship("User", back_populates="notifications")

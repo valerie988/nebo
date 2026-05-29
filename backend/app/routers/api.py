@@ -1,7 +1,6 @@
 import os, shutil, uuid
 from typing import List, Optional
-from app.models.notification import Notification
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, status
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.database import get_db
@@ -9,16 +8,37 @@ from app.core.security import get_current_user, require_farmer
 from app.core.config import settings
 from app.models.user import User
 from app.models.product import Product 
+from app.models.notification import Notification
 
 from app.schemas.schemas import (
     ProductOut, ProductUpdate,
     UserOut, UserUpdate,
 )
+from pydantic import BaseModel, Field
 from app.services.email import send_order_notification_email
+from cloudinary_config import upload_product_image
 
-# Users
+# --- Pydantic Schema for Direct Frontend Cloudinary JSON Payload ---
+class ProductCreateJSON(BaseModel):
+    name: str
+    category: str
+    price: float
+    unit: str
+    quantity: float
+    description: Optional[str] = ""
+    location: str
+    image: Optional[str] = None  # Receives the single Cloudinary string URL from Mobile
+
+# Routers
 users_router = APIRouter(prefix="/users", tags=["users"])
 notification_router = APIRouter(prefix="/notifications", tags=["notifications"])
+products_router = APIRouter(prefix="/products", tags=["products"])
+
+ALLOWED_TYPES = {"image/jpeg", "image/png", "image/webp"}
+
+# ──────────────────────────────────────────────────────────────────────────────
+# USERS ROUTES
+# ──────────────────────────────────────────────────────────────────────────────
 
 @users_router.get("/me", response_model=UserOut)
 def get_me(current_user: User = Depends(get_current_user)):
@@ -46,14 +66,48 @@ def get_user(user_id: str, db: Session = Depends(get_db)):
     return user
 
 
-# Products 
-products_router = APIRouter(prefix="/products", tags=["products"])
+# ──────────────────────────────────────────────────────────────────────────────
+# PRODUCTS ROUTES
+# ──────────────────────────────────────────────────────────────────────────────
 
-ALLOWED_TYPES = {"image/jpeg", "image/png", "image/webp"}
-
-
+# ✅ NEW STRATEGY: JSON Endpoint for Mobile App (Front-end uploads to Cloudinary)
 @products_router.post("", response_model=ProductOut, status_code=201)
 async def create_product(
+    payload: ProductCreateJSON,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_farmer),
+):
+    try:
+        # Wrap the incoming string URL parameter inside a list to match your database JSON array setup
+        photo_urls = [payload.image] if payload.image else []
+
+        product = Product(
+            farmer_id=current_user.id,
+            name=payload.name,
+            category=payload.category,
+            price=payload.price,
+            unit=payload.unit,
+            quantity=payload.quantity,
+            description=payload.description,
+            location=payload.location,
+            photos=photo_urls,  # Securely maps to your SQLAlchemy JSON list column
+        )
+        db.add(product)
+        db.commit()
+        db.refresh(product)
+        return product
+        
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Database instantiation transaction failed: {str(e)}"
+        )
+
+
+# 🔄 LEGACY STRATEGY: Kept for web dashboard multi-file form uploads
+@products_router.post("/legacy-form-upload", response_model=ProductOut, status_code=201)
+async def create_product_legacy_form(
     name: str = Form(...),
     category: str = Form(...),
     price: float = Form(...),
@@ -66,20 +120,19 @@ async def create_product(
     current_user: User = Depends(require_farmer),
 ):
     photo_urls = []
-    os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 
-    for photo in photos[:4]:  # max 4
+    for photo in photos[:4]:  
         if photo.content_type not in ALLOWED_TYPES:
             raise HTTPException(status_code=400, detail=f"Invalid file type: {photo.content_type}")
 
-        ext = photo.filename.split(".")[-1] if photo.filename else "jpg"
-        filename = f"{uuid.uuid4()}.{ext}"
-        path = os.path.join(settings.UPLOAD_DIR, filename)
-
-        with open(path, "wb") as f:
-            shutil.copyfileobj(photo.file, f)
-
-        photo_urls.append(f"{settings.APP_URL}/uploads/products/{filename}")
+        try:
+            cloudinary_url = upload_product_image(photo)
+            photo_urls.append(cloudinary_url)
+        except Exception as e:
+            raise HTTPException(
+                status_code=500, 
+                detail=f"Failed uploading image asset to Cloudinary: {str(e)}"
+            )
 
     product = Product(
         farmer_id=current_user.id,
@@ -144,9 +197,16 @@ def get_product(product_id: str, db: Session = Depends(get_db)):
 
 
 @products_router.patch("/{product_id}", response_model=ProductOut)
-def update_product(
+async def update_product(
     product_id: str,
-    body: ProductUpdate,
+    name: Optional[str] = Form(None),
+    category: Optional[str] = Form(None),
+    price: Optional[float] = Form(None),
+    unit: Optional[str] = Form(None),
+    quantity: Optional[float] = Form(None),
+    description: Optional[str] = Form(None),
+    location: Optional[str] = Form(None),
+    file: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_farmer),
 ):
@@ -154,11 +214,29 @@ def update_product(
         Product.id == product_id,
         Product.farmer_id == current_user.id,
     ).first()
+    
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
 
-    for field, value in body.model_dump(exclude_none=True).items():
-        setattr(product, field, value)
+    payload_data = {
+        "name": name, "category": category, "price": price,
+        "unit": unit, "quantity": quantity, "description": description,
+        "location": location
+    }
+    
+    for field, value in payload_data.items():
+        if value is not None:
+          setattr(product, field, value)
+
+    if file:
+        if file.content_type not in ALLOWED_TYPES:
+            raise HTTPException(status_code=400, detail="Invalid image file type extension")
+        try:
+            new_cloudinary_url = upload_product_image(file)
+            product.photos = [new_cloudinary_url]
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Cloudinary patch error: {str(e)}")
+
     db.commit()
     db.refresh(product)
     return product
@@ -179,7 +257,11 @@ def delete_product(
     product.is_active = False
     db.commit()
 
+
+# ──────────────────────────────────────────────────────────────────────────────
+# NOTIFICATIONS ROUTES
+# ──────────────────────────────────────────────────────────────────────────────
+
 @notification_router.get("/")
 def get_notifications(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     return db.query(Notification).filter(Notification.user_id == current_user.id).order_by(Notification.created_at.desc()).all()
-

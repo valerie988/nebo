@@ -1,12 +1,24 @@
-import { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Alert, Image, ScrollView } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import * as ImagePicker from "expo-image-picker";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import Constants from "expo-constants";
+import * as ImagePicker from "expo-image-picker";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import React, { useState, useMemo } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  Image,
+  Platform,
+  ScrollView,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-const API_URL = "http://172.20.10.2:8000";
+// Read the dynamic API configuration from app.config.js / app.json
+const API_URL = Constants.expoConfig?.extra?.API_URL;
 
 export default function EditProfileScreen() {
   const router = useRouter();
@@ -19,6 +31,15 @@ export default function EditProfileScreen() {
   
   // States
   const [loading, setLoading] = useState(false);
+
+  // 📸 Dynamic optimization transform step for incoming Cloudinary current profiles
+  const currentProfileImageUri = useMemo(() => {
+    const originalUrl = params.currentImage as string;
+    if (originalUrl && originalUrl.includes("/upload/")) {
+      return originalUrl.replace("/upload/", "/upload/w_200,h_200,c_fill,q_auto/");
+    }
+    return originalUrl || null;
+  }, [params.currentImage]);
 
   const pickImage = async () => {
     let result = await ImagePicker.launchImageLibraryAsync({
@@ -33,7 +54,7 @@ export default function EditProfileScreen() {
   const handleUpdate = async () => {
     setLoading(true);
     try {
-      const token = await AsyncStorage.getItem("nebo_token");
+      const token = await AsyncStorage.getItem("nebo_token") || await AsyncStorage.getItem("token");
       const formData = new FormData();
       
       formData.append("full_name", name);
@@ -42,8 +63,13 @@ export default function EditProfileScreen() {
       if (image) {
         const filename = image.split("/").pop();
         const match = /\.(\w+)$/.exec(filename || "");
-        const type = match ? `image/${match[1]}` : `image`;
-        formData.append("profile_pic", { uri: image, name: filename, type } as any);
+        const type = match ? `image/${match[1]}` : `image/jpeg`;
+        
+        formData.append("profile_pic", { 
+          uri: Platform.OS === "ios" ? image.replace("file://", "") : image, 
+          name: filename || "profile.jpg", 
+          type 
+        } as any);
       }
       
       const response = await fetch(`${API_URL}/auth/update`, {
@@ -51,6 +77,7 @@ export default function EditProfileScreen() {
         headers: { 
           "Authorization": `Bearer ${token}`,
           "Accept": "application/json",
+          // Content-Type must remain undefined here so fetch creates its proper multi-part boundaries
         },
         body: formData,
       });
@@ -58,11 +85,16 @@ export default function EditProfileScreen() {
       if (response.ok) {
         Alert.alert("Success ✨", "Your business profile has been updated.");
         router.back();
+      } else {
+        const errJson = await response.json();
+        Alert.alert("Update Error", errJson.detail || "Unable to update profile parameters.");
       }
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     } catch (e) {
       Alert.alert("Update Failed", "Please check your internet connection.");
-    } finally { setLoading(false); }
+      console.error("Profile update error: ", e);
+    } finally { 
+      setLoading(false); 
+    }
   };
 
   return (
@@ -73,10 +105,10 @@ export default function EditProfileScreen() {
           {/* Header Navigation */}
           <View className="flex-row justify-between items-center mb-8">
             <TouchableOpacity 
-                onPress={() => router.back()} 
-                className="w-10 h-10 bg-white rounded-full items-center justify-center border border-[#D8F3DC]"
+              onPress={() => router.back()} 
+              className="w-10 h-10 bg-white rounded-full items-center justify-center border border-[#D8F3DC]"
             >
-                 <Ionicons name="arrow-back" size={20} color="#1B4332" />
+              <Ionicons name="arrow-back" size={20} color="#1B4332" />
             </TouchableOpacity>
             <Text className="text-[#1B4332] text-xl font-black">Edit Profile</Text>
             <View className="w-10" /> 
@@ -86,10 +118,16 @@ export default function EditProfileScreen() {
           <View className="items-center mb-10">
             <TouchableOpacity onPress={pickImage} activeOpacity={0.9} className="relative">
               <View className="w-36 h-36 rounded-[45px] bg-white border-2 border-dashed border-[#B7E4C7] overflow-hidden items-center justify-center shadow-sm">
-                {image || params.currentImage ? (
-                  <Image source={{ uri: image || (params.currentImage as string) }} className="w-full h-full" />
+                {image || currentProfileImageUri ? (
+                  <Image 
+                    source={{ uri: image || currentProfileImageUri! }} 
+                    className="w-full h-full"
+                    resizeMode="cover"
+                  />
                 ) : (
-                  <Text className="text-5xl">👨‍🌾</Text>
+                  <View className="items-center justify-center bg-[#D8F3DC] w-full h-full">
+                    <Ionicons name="person" size={56} color="#2D6A4F" />
+                  </View>
                 )}
               </View>
               <View className="absolute bottom-1 right-1 bg-[#1B4332] p-2.5 rounded-full border-4 border-[#F0FAF4]">
@@ -110,6 +148,7 @@ export default function EditProfileScreen() {
                 onChangeText={setName} 
                 className="bg-[#F0FAF4] p-4 rounded-2xl text-[#1B4332] font-semibold border border-[#E9F7EF]" 
                 placeholder="Business or Personal Name"
+                placeholderTextColor="#95D5B2"
               />
             </View>
 
@@ -120,6 +159,7 @@ export default function EditProfileScreen() {
                 onChangeText={setLocation} 
                 className="bg-[#F0FAF4] p-4 rounded-2xl text-[#1B4332] font-semibold border border-[#E9F7EF]" 
                 placeholder="e.g. Molyko, Buea"
+                placeholderTextColor="#95D5B2"
               />
             </View>
           </View>
@@ -129,29 +169,29 @@ export default function EditProfileScreen() {
           
           <View className="bg-white rounded-[28px] p-5 border border-[#D8F3DC] mb-10 opacity-70">
             <View className="flex-row justify-between items-center mb-5">
-               <View>
-                 <Text className="text-[#95D5B2] text-[11px] font-bold mb-1">Email Address</Text>
-                 <Text className="text-[#1B4332] font-semibold">{params.email || "farmer@nebo.com"}</Text>
-               </View>
-               <Ionicons name="lock-closed-outline" size={16} color="#B7E4C7" />
+              <View>
+                <Text className="text-[#95D5B2] text-[11px] font-bold mb-1">Email Address</Text>
+                <Text className="text-[#1B4332] font-semibold">{params.email || "farmer@nebo.com"}</Text>
+              </View>
+              <Ionicons name="lock-closed-outline" size={16} color="#B7E4C7" />
             </View>
 
             <View className="flex-row justify-between items-center mb-5">
-               <View>
-                 <Text className="text-[#95D5B2] text-[11px] font-bold mb-1">Account ID</Text>
-                 <Text className="text-[#1B4332] font-semibold">#{params.userId || "88231"}</Text>
-               </View>
-               <Ionicons name="finger-print-outline" size={16} color="#B7E4C7" />
+              <View>
+                <Text className="text-[#95D5B2] text-[11px] font-bold mb-1">Account ID</Text>
+                <Text className="text-[#1B4332] font-semibold">#{params.userId || "88231"}</Text>
+              </View>
+              <Ionicons name="finger-print-outline" size={16} color="#B7E4C7" />
             </View>
 
             <View className="flex-row justify-between items-center">
-               <View>
-                 <Text className="text-[#95D5B2] text-[11px] font-bold mb-1">Membership</Text>
-                 <Text className="text-[#1B4332] font-semibold">Joined {params.joinDate || "April 2026"}</Text>
-               </View>
-               <View className="bg-[#D8F3DC] px-3 py-1 rounded-full">
-                  <Text className="text-[#1B7344] text-[9px] font-black uppercase">Verified</Text>
-               </View>
+              <View>
+                <Text className="text-[#95D5B2] text-[11px] font-bold mb-1">Membership</Text>
+                <Text className="text-[#1B4332] font-semibold">Joined {params.joinDate || "April 2026"}</Text>
+              </View>
+              <View className="bg-[#D8F3DC] px-3 py-1 rounded-full">
+                <Text className="text-[#1B7344] text-[9px] font-black uppercase">Verified</Text>
+              </View>
             </View>
           </View>
           

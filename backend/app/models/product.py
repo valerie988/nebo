@@ -29,6 +29,8 @@ class Product(Base):
     is_active   = Column(Boolean, default=True)
     created_at  = Column(DateTime(timezone=True), default=utcnow)
     updated_at  = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+    is_flagged  = Column(Boolean, default=False)
+    flag_reason = Column(String(500), nullable=True)
 
     # Relationships
     farmer      = relationship("User", back_populates="products")
