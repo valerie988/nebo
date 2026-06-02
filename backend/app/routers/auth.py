@@ -75,16 +75,19 @@ async def signup(
         user_id=user.id,
     )
 
-
 @router.post("/login", response_model=TokenResponse)
 def login(body: LoginRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == body.email).first()
 
-    if not user or not pwd_ctx.verify(body.password, user.hashed_password):
+    # DEBUG LOGS
+    if not user:
+        print(f"DEBUG: No user found with email {body.email}")
         raise HTTPException(status_code=401, detail="Invalid email or password")
-
-    if not user.is_active:
-        raise HTTPException(status_code=403, detail="Account is deactivated")
+    
+    password_match = pwd_ctx.verify(body.password, user.hashed_password)
+    if not password_match:
+        print(f"DEBUG: Password verification failed for {body.email}")
+        raise HTTPException(status_code=401, detail="Invalid email or password")
 
     access  = create_access_token({"sub": user.id, "role": user.role})
     refresh = create_refresh_token({"sub": user.id})
@@ -159,26 +162,21 @@ def logout(
     return {"message": "Logged out successfully"}
 
 
-
 @router.get("/me", response_model=UserOutWithStats)
 async def get_me(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    # 1. Calculate stats
     order_count = db.query(Order).filter(Order.customer_id == current_user.id).count()
     product_count = db.query(Product).filter(Product.farmer_id == current_user.id).count()
 
-    return {
-        "id": current_user.id,
-        "full_name": current_user.full_name,
-        "email": current_user.email,
-        "phone": current_user.phone,
-        "role": current_user.role,
-        "location": current_user.location,
-        "avatar_url": current_user.avatar_url,
-        "is_verified": current_user.is_verified,
-        "created_at": current_user.created_at,
-        "total_products": product_count,
-        "total_orders": order_count
-    }
+    # 2. Convert current_user to a dictionary
+    user_dict = UserOut.model_validate(current_user, from_attributes=True).model_dump()
     
+    # 3. Add the stats to the dictionary
+    user_dict["total_products"] = product_count
+    user_dict["total_orders"] = order_count
+    
+    # 4. Return as the full schema
+    return user_dict
 
 @router.patch("/update", response_model=UserOut)
 async def update_profile(

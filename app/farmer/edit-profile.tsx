@@ -50,50 +50,55 @@ export default function EditProfileScreen() {
     });
     if (!result.canceled) setImage(result.assets[0].uri);
   };
-
-  const handleUpdate = async () => {
+const handleUpdate = async () => {
     setLoading(true);
-    try {
-      const token = await AsyncStorage.getItem("nebo_token") || await AsyncStorage.getItem("token");
-      const formData = new FormData();
-      
-      formData.append("full_name", name);
-      formData.append("location", location);
+    let uploadedImageUrl = currentProfileImageUri; // Default to existing
 
+    try {
+      // 1. Upload to Cloudinary if a new image exists
       if (image) {
-        const filename = image.split("/").pop();
-        const match = /\.(\w+)$/.exec(filename || "");
-        const type = match ? `image/${match[1]}` : `image/jpeg`;
-        
-        formData.append("profile_pic", { 
-          uri: Platform.OS === "ios" ? image.replace("file://", "") : image, 
-          name: filename || "profile.jpg", 
-          type 
+        const formData = new FormData();
+        formData.append("file", { 
+          uri: image, 
+          name: "avatar.jpg", 
+          type: "image/jpeg" 
         } as any);
+        formData.append("upload_preset", "YOUR_CLOUDINARY_PRESET"); // Add your preset here
+
+        const res = await fetch(`https://api.cloudinary.com/v1_1/YOUR_CLOUD_NAME/image/upload`, {
+          method: "POST",
+          body: formData,
+        });
+        const cloudData = await res.json();
+        uploadedImageUrl = cloudData.secure_url;
       }
-      
-      const response = await fetch(`${API_URL}/auth/update`, {
+
+      // 2. PATCH request to your Backend (Clean JSON)
+      const token = await AsyncStorage.getItem("nebo_token");
+      const response = await fetch(`${API_URL}/api/auth/update`, {
         method: "PATCH",
         headers: { 
           "Authorization": `Bearer ${token}`,
-          "Accept": "application/json",
-          // Content-Type must remain undefined here so fetch creates its proper multi-part boundaries
+          "Content-Type": "application/json", // <-- Crucial
         },
-        body: formData,
+        body: JSON.stringify({
+          full_name: name,
+          location: location,
+          avatar_url: uploadedImageUrl 
+        }),
       });
 
       if (response.ok) {
-        Alert.alert("Success ✨", "Your business profile has been updated.");
+        Alert.alert("Success ✨", "Profile updated.");
         router.back();
       } else {
         const errJson = await response.json();
-        Alert.alert("Update Error", errJson.detail || "Unable to update profile parameters.");
+        Alert.alert("Update Error", errJson.detail || "Error updating profile.");
       }
     } catch (e) {
-      Alert.alert("Update Failed", "Please check your internet connection.");
-      console.error("Profile update error: ", e);
-    } finally { 
-      setLoading(false); 
+      Alert.alert("Error", "Check your connection.");
+    } finally {
+      setLoading(false);
     }
   };
 

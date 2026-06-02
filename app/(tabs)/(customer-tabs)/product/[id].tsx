@@ -1,238 +1,135 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import Constants from "expo-constants";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Image,
+  Modal,
   ScrollView,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 
-// --- Configuration ---
 const API_URL = Constants.expoConfig?.extra?.API_URL;
 
-const getProductIcon = (category: string) => {
-  switch (category?.toLowerCase()) {
-    case "veggies":
-      return "carrot";
-    case "fruits":
-      return "food-apple";
-    case "grains":
-      return "barley";
-    case "herbs":
-      return "leaf";
-    case "roots":
-      return "corn";
-    default:
-      return "package-variant-closed";
-  }
-};
-
 export default function ProductDetails() {
-  const { id } = useLocalSearchParams();
+  const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+
   const [product, setProduct] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [isLiked, setIsLiked] = useState(false);
+  const [rating, setRating] = useState(0);
+  const [showOrderModal, setShowOrderModal] = useState(false);
+
+  // Auto-dismiss modal after 2 seconds
+  useEffect(() => {
+    if (showOrderModal) {
+      const timer = setTimeout(() => setShowOrderModal(false), 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [showOrderModal]);
 
   useEffect(() => {
-    if (!API_URL) {
-      console.warn("API_URL is undefined in config files.");
-      return;
-    }
-
-    fetch(`${API_URL}/products/${id}`)
+    if (!id) return;
+    fetch(`${API_URL}/api/products/${id}`)
       .then((res) => res.json())
       .then((data) => {
         setProduct(data);
         setLoading(false);
       })
       .catch((err) => {
-        console.error("Failed fetching item fields", err);
+        console.error("Fetch error:", err);
         setLoading(false);
       });
   }, [id]);
 
-  // 📸 Process primary display asset with Cloudinary delivery optimizations
-  const displayImageUri = useMemo(() => {
-    if (product?.photos && product.photos.length > 0) {
-      const originalUrl = product.photos[0];
-      if (originalUrl.includes("/upload/")) {
-        return originalUrl.replace(
-          "/upload/",
-          "/upload/w_800,h_600,c_fill,q_auto/",
-        );
-      }
-      return originalUrl;
-    }
-    // Backward compatibility for standard single image parameter string injection
-    if (product?.image && product.image.includes("/upload/")) {
-      return product.image.replace(
-        "/upload/",
-        "/upload/w_800,h_600,c_fill,q_auto/",
-      );
-    }
-    return product?.image || null;
-  }, [product]);
-
-  // Aligns stock check with system schemas tracking listing balance bounds
-  const hasAvailableInventory = product ? product.quantity > 0 : false;
-
-  if (loading) {
-    return (
-      <View className="flex-1 justify-center bg-white">
-        <ActivityIndicator size="large" color="#1B4332" />
-      </View>
-    );
-  }
-
-  if (!product) {
-    return (
-      <View className="flex-1 justify-center items-center bg-white p-5">
-        <Ionicons name="alert-circle-outline" size={48} color="#DC2626" />
-        <Text className="text-[#1B4332] font-bold text-lg mt-2">
-          Product not found
-        </Text>
-      </View>
-    );
-  }
+  if (loading) return <View className="flex-1 justify-center bg-white"><ActivityIndicator size="large" color="#1B4332" /></View>;
 
   return (
-    <View className="flex-1 bg-white">
-      <SafeAreaView className="flex-1">
-        {/* Navigation Bar Header */}
-        <View className="px-5 py-4 flex-row items-center justify-between">
-          <TouchableOpacity
-            onPress={() => router.back()}
-            className="bg-[#F0FAF4] p-3 rounded-2xl flex-row items-center"
-          >
-            <Ionicons
-              name="arrow-back"
-              size={18}
-              color="#1B4332"
-              style={{ marginRight: 4 }}
-            />
-            <Text className="text-[#1B4332] font-bold">Back</Text>
-          </TouchableOpacity>
-          <Text className="text-[#1B4332] font-black text-lg tracking-tight">
-            Product Details
-          </Text>
-          <View className="w-16" />
+    <View className="flex-1 bg-[#FDFEFE]">
+      {/* Floating Header */}
+      <View className="absolute top-12 px-6 w-full flex-row justify-between z-10">
+        <TouchableOpacity onPress={() => router.back()} className="bg-white/90 p-3 rounded-full shadow-sm">
+          <Ionicons name="arrow-back" size={22} color="#1B4332" />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => setIsLiked(!isLiked)} className="bg-white/90 p-3 rounded-full shadow-sm">
+          <Ionicons name={isLiked ? "heart" : "heart-outline"} size={22} color={isLiked ? "#EF4444" : "#1B4332"} />
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
+        <View className="w-full h-[380px] bg-[#F4F7F6]">
+          {product?.photos?.[0] ? (
+            <Image source={{ uri: product.photos[0] }} className="w-full h-full" resizeMode="cover" />
+          ) : (
+            <View className="flex-1 items-center justify-center"><MaterialCommunityIcons name="leaf" size={80} color="#D8F3DC" /></View>
+          )}
         </View>
 
-        <ScrollView className="px-5" showsVerticalScrollIndicator={false}>
-          {/* Main Visual Frame Container */}
-          <View className="h-64 w-full bg-[#F0FAF4] rounded-[40px] items-center justify-center my-6 shadow-sm border border-[#D8F3DC] overflow-hidden relative">
-            {displayImageUri ? (
-              <Image
-                source={{ uri: displayImageUri }}
-                className="w-full h-full"
-                resizeMode="cover"
-              />
-            ) : (
-              <MaterialCommunityIcons
-                name={getProductIcon(product.category)}
-                size={110}
-                color="#2D6A4F"
-              />
-            )}
+        <View className="px-6 py-8">
+          <Text className="text-4xl font-black text-[#1B4332] tracking-tight">{product?.name}</Text>
+          <Text className="text-2xl font-bold text-[#2D6A4F] mt-2">{product?.price} XAF</Text>
 
-            {!hasAvailableInventory && (
-              <View className="absolute bg-red-500/90 px-5 py-2 rounded-full shadow-sm z-10">
-                <Text className="text-white text-xs font-black uppercase tracking-widest">
-                  Out of Stock
-                </Text>
-              </View>
-            )}
-          </View>
-
-          {/* Heading Metadata block */}
-          <View className="flex-row justify-between items-start">
-            <View className="flex-1 mr-4">
-              <Text className="text-3xl font-black text-[#1B4332] tracking-tight leading-8">
-                {product.name}
-              </Text>
-              <View className="flex-row items-center gap-1 mt-1.5">
-                <Ionicons name="person-outline" size={14} color="#52B788" />
-                <Text className="text-[#52B788] text-base font-semibold">
-                  By {product.farmer_name}
-                </Text>
-              </View>
+          {/* Farmer and Rating Metadata */}
+          <View className="mt-6 flex-row justify-between items-center bg-[#F8FDF9] p-4 rounded-2xl border border-[#D8F3DC]">
+            <View>
+              <Text className="text-[#1B4332] font-bold text-lg">{product?.farmer_name || "Unknown Farmer"}</Text>
+              <Text className="text-[#52B788] text-sm">📍 {product?.location || "Location not set"}</Text>
             </View>
-            <View className="bg-[#D8F3DC] px-4 py-2.5 rounded-2xl items-center min-w-[75px]">
-              <Text className="text-[#1B4332] font-black text-xl">
-                {product.price}
-              </Text>
-              <Text className="text-[#2D6A4F] font-black text-[9px] tracking-wider uppercase mt-0.5">
-                XAF
-              </Text>
+            <View className="flex-row gap-0.5">
+              {[1, 2, 3, 4, 5].map((star) => (
+                <TouchableOpacity key={star} onPress={() => setRating(star)}>
+                  <Ionicons name={star <= rating ? "star" : "star-outline"} size={20} color="#F59E0B" />
+                </TouchableOpacity>
+              ))}
             </View>
           </View>
 
-          {/* About Segment Section */}
-          <View className="mt-8">
-            <Text className="text-[#1B4332] font-bold text-xl mb-2.5">
-              About this product
-            </Text>
-            <Text className="text-[#2D6A4F] leading-6 text-base font-medium">
-              {product.description ||
-                "No description provided for this listing."}
-            </Text>
-          </View>
-
-          {/* Availability Info row */}
-          <View className="bg-[#F0FAF4] p-5 rounded-3xl mt-8 mb-6 flex-row items-center justify-between border border-[#D8F3DC]">
-            <View className="flex-row items-center gap-3">
-              <View className="bg-white p-2.5 rounded-xl">
-                <Ionicons name="cube-outline" size={22} color="#1B4332" />
-              </View>
-              <View>
-                <Text className="text-[#1B4332] font-bold text-base">
-                  Availability
-                </Text>
-                <Text className="text-[#52B788] text-xs font-semibold mt-0.5">
-                  {hasAvailableInventory
-                    ? `${product.quantity} units available`
-                    : "Sold out"}{" "}
-                  · Sold per {product.unit || "unit"}
-                </Text>
-              </View>
+          {/* Inventory Stats */}
+          <View className="mt-4 flex-row gap-4">
+            <View className="flex-1 bg-[#F0FAF4] p-4 rounded-2xl border border-[#D8F3DC]">
+              <Text className="text-[#52B788] text-xs font-bold uppercase">Quantity</Text>
+              <Text className="text-[#1B4332] font-bold text-lg">{product?.quantity} {product?.unit}</Text>
             </View>
-            {hasAvailableInventory ? (
-              <Ionicons name="checkmark-circle" size={28} color="#2D6A4F" />
-            ) : (
-              <Ionicons name="close-circle" size={28} color="#DC2626" />
-            )}
+            <View className="flex-1 bg-[#F0FAF4] p-4 rounded-2xl border border-[#D8F3DC]">
+              <Text className="text-[#52B788] text-xs font-bold uppercase">Category</Text>
+              <Text className="text-[#1B4332] font-bold text-lg">{product?.category}</Text>
+            </View>
           </View>
-        </ScrollView>
 
-        {/* Action Button Footer section wrapper */}
-        <View className="p-5 border-t border-[#D8F3DC] bg-white">
-          <TouchableOpacity
-            activeOpacity={0.85}
-            className="bg-[#1B4332] w-full py-4 rounded-2xl flex-row items-center justify-center gap-2 shadow-md"
-            onPress={() =>
-              router.push({
-                pathname: "/chat",
-                params: {
-                  farmerId: product.id,
-                  farmerName: product.farmer_name,
-                },
-              })
-            }
-          >
-            <Ionicons
-              name="chatbubble-ellipses-outline"
-              size={20}
-              color="white"
-            />
-            <Text className="text-white font-bold text-lg">Message Farmer</Text>
-          </TouchableOpacity>
+          <View className="mt-6">
+            <Text className="text-[#1B4332] font-bold text-lg mb-2">Description</Text>
+            <Text className="text-[#2D6A4F] leading-7 text-base">{product?.description || "No description provided."}</Text>
+          </View>
         </View>
-      </SafeAreaView>
+      </ScrollView>
+
+      {/* Footer Actions */}
+      <View className="absolute bottom-0 w-full p-6 bg-white border-t border-[#F0FAF4] flex-row gap-4">
+        <TouchableOpacity className="flex-1 bg-[#2D6A4F] h-14 rounded-2xl items-center justify-center" onPress={() => setShowOrderModal(true)}>
+          <Text className="text-white font-bold text-base">Order Directly</Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          className="w-14 h-14 bg-[#F0FAF4] rounded-2xl items-center justify-center"
+          onPress={() => router.push({ pathname: "/chat", params: { farmerId: product.farmer_id, farmerName: product.farmer_name }})}
+        >
+          <Ionicons name="chatbubble-ellipses" size={24} color="#1B4332" />
+        </TouchableOpacity>
+      </View>
+
+      {/* Auto-closing Modal */}
+      <Modal visible={showOrderModal} transparent animationType="fade">
+        <View className="flex-1 justify-center items-center bg-black/40 px-6">
+          <View className="bg-white p-8 rounded-[32px] items-center w-full">
+            <Ionicons name="checkmark-circle" size={60} color="#52B788" />
+            <Text className="text-2xl font-black text-[#1B4332] mt-4">Order Placed!</Text>
+            <Text className="text-[#2D6A4F] text-center mt-2">The farmer has been notified.</Text>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }

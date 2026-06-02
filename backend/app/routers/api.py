@@ -240,8 +240,6 @@ async def update_product(
     db.commit()
     db.refresh(product)
     return product
-
-
 @products_router.delete("/{product_id}", status_code=204)
 def delete_product(
     product_id: str,
@@ -252,16 +250,35 @@ def delete_product(
         Product.id == product_id,
         Product.farmer_id == current_user.id,
     ).first()
+
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
+
     product.is_active = False
     db.commit()
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# NOTIFICATIONS ROUTES
-# ──────────────────────────────────────────────────────────────────────────────
+@users_router.get("", response_model=List[UserOut])
+def get_users(
+    role: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    query = db.query(User)
+
+    if role:
+        query = query.filter(User.role == role)
+
+    return query.all()
+
 
 @notification_router.get("/")
-def get_notifications(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    return db.query(Notification).filter(Notification.user_id == current_user.id).order_by(Notification.created_at.desc()).all()
+def get_notifications(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return (
+        db.query(Notification)
+        .filter(Notification.user_id == current_user.id)
+        .order_by(Notification.created_at.desc())
+        .all()
+    )

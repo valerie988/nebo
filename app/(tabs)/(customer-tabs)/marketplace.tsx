@@ -216,9 +216,8 @@ function LargeProductCard({ item, router }: { item: any; router: any }) {
         <View className="flex-row gap-3">
           <TouchableOpacity
             onPress={() => {
-              // This tells Expo to look for the 'product' folder
-              // inside the current directory (customer-tabs)
-              router.push(`./product/${item.id}` as any);
+              // Change the path to an absolute route
+              router.push(`/product/${item.id}`);
             }}
             className="flex-1 bg-[#F0FAF4] py-3 rounded-xl items-center border border-[#D8F3DC]"
           >

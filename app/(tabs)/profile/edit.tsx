@@ -1,21 +1,20 @@
 import { useAuth } from "@/components/context/AuthContext";
 import { Ionicons } from "@expo/vector-icons";
+import Constants from "expo-constants";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    Image,
-    Platform,
-    ScrollView,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Image,
+  ScrollView,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import Constants from "expo-constants";
 
 // Read the dynamic API configuration configuration setup
 const API_URL = Constants.expoConfig?.extra?.API_URL;
@@ -36,17 +35,17 @@ export default function EditProfileScreen() {
     }
 
     let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"], 
+      mediaTypes: ["images"],
       allowsEditing: true,
       aspect: [1, 1],
-      quality: 0.5, 
+      quality: 0.5,
     });
 
     if (!result.canceled) {
       setImage(result.assets[0].uri);
     }
   };
-  
+
   const { token } = useAuth();
   const router = useRouter();
 
@@ -64,8 +63,8 @@ export default function EditProfileScreen() {
   useEffect(() => {
     const fetchCurrentData = async () => {
       try {
-        const fullUrl = `${API_URL}/auth/me`;
-        
+        const fullUrl = `${API_URL}/api/auth/me`;
+
         const res = await fetch(fullUrl, {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -85,7 +84,7 @@ export default function EditProfileScreen() {
           });
           // If the backend drops an absolute path profile image link, sync it over
           if (data.profile_pic) {
-             setImage(data.profile_pic);
+            setImage(data.profile_pic);
           }
         } else {
           Alert.alert("Error", `Server returned ${res.status}`);
@@ -103,46 +102,62 @@ export default function EditProfileScreen() {
 
   const handleUpdate = async () => {
     setSaving(true);
+    let uploadedImageUrl = null;
+
     try {
-      const formData = new FormData();
-      formData.append("full_name", form.full_name);
-      formData.append("phone", form.phone);
-      formData.append("location", form.location);
-
-      // Verify if a brand new image stream was picked locally (starts with 'file://' or 'ph://')
-      if (image && (image.startsWith("file://") || image.startsWith("content://"))) {
-        const filename = image.split("/").pop();
-        const match = /\.(\w+)$/.exec(filename || "");
-        const type = match ? `image/${match[1]}` : `image/jpeg`;
-
-        formData.append("profile_pic", {
-          uri: Platform.OS === "ios" ? image.replace("file://", "") : image,
-          name: filename || "profile.jpg",
-          type,
+      // Step 1: Upload Image to Cloudinary if it changed
+      // We check if the image starts with "http" to see if it's already an uploaded URL
+      if (image && !image.startsWith("http")) {
+        const formData = new FormData();
+        formData.append("file", {
+          uri: image,
+          name: "avatar.jpg",
+          type: "image/jpeg",
         } as any);
+        // Replace with your actual values
+        formData.append("upload_preset", "YOUR_PRESET_NAME");
+
+        const cloudinaryRes = await fetch(
+          "https://api.cloudinary.com/v1_1/YOUR_CLOUD_NAME/image/upload",
+          {
+            method: "POST",
+            body: formData,
+          },
+        );
+        const result = await cloudinaryRes.json();
+        uploadedImageUrl = result.secure_url;
+      } else {
+        uploadedImageUrl = image; // Keep existing URL
       }
 
-      const res = await fetch(`${API_URL}/auth/update`, {
+      // Step 2: Send TEXT data to your backend via JSON
+      const response = await fetch(`${API_URL}/api/auth/update`, {
         method: "PATCH",
         headers: {
           Authorization: `Bearer ${token}`,
-          Accept: "application/json",
-          // Leaving Content-Type out allows fetch to handle file boundaries cleanly
+          "Content-Type": "application/json",
         },
-        body: formData,
+        body: JSON.stringify({
+          full_name: form.full_name,
+          phone: form.phone,
+          location: form.location,
+          avatar_url: uploadedImageUrl,
+        }),
       });
 
-      if (res.ok) {
-        Alert.alert("Success ✨", "Profile updated!", [
-          { text: "OK", onPress: () => router.back() },
-        ]);
+      if (response.ok) {
+        Alert.alert("Success", "Profile updated successfully!");
+        router.back();
       } else {
-        const errorJson = await res.json();
-        Alert.alert("Update Failed", errorJson.detail || "Check your inputs.");
+        const errData = await response.json();
+        Alert.alert(
+          "Update Failed",
+          errData.detail || "Could not update profile",
+        );
       }
     } catch (err) {
-      Alert.alert("Error", "Network connection failed");
-      console.error("Profile saving error: ", err);
+      console.error("Update Error:", err);
+      Alert.alert("Error", "Check terminal for network error details");
     } finally {
       setSaving(false);
     }

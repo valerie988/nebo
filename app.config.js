@@ -25,7 +25,7 @@ module.exports = {
       favicon: "./assets/favicon.png",
     },
     extra: {
-      API_URL: "http://192.168.11.101:8000",
+      API_URL: "http://172.20.10.2:8000",
     },
   },
 };

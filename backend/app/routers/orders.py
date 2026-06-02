@@ -21,7 +21,13 @@ async def get_orders(
 @router.get("/{order_id}", response_model=OrderOut)
 async def get_order_detail(order_id: str, db: Session = Depends(get_db)):
     # Query logic: fetch order by ID
-    return {"id": order_id, "status": "processing", ...}
+    return {
+    "id": order_id, 
+    "status": "processing", 
+    "customer_id": customer_id, 
+    "total_amount": 0.0, 
+    "items": []
+}
 
 # 3. Create a new order
 @router.post("/", response_model=OrderOut, status_code=status.HTTP_201_CREATED)
@@ -30,8 +36,15 @@ async def create_order(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
-    # Logic to process payment and save order
-    return {"id": "new_id", ...}
+    return {
+    "id": "new_id",
+    "customer_id": "example_customer_id",
+    "farmer_id": "example_farmer_id",
+    "total_amount": 0.0,
+    "status": "processing",
+    "items": [],
+    "created_at": datetime.utcnow()
+}
 
 # 4. Update order status
 @router.patch("/{order_id}/status", response_model=OrderOut)
@@ -40,5 +53,5 @@ async def update_status(
     payload: OrderStatusUpdate,
     db: Session = Depends(get_db)
 ):
-    # Logic to update status field
+
     return {"id": order_id, "status": payload.status}

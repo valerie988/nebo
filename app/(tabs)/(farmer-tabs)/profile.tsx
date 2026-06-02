@@ -124,6 +124,12 @@ export default function FarmerProfileScreen() {
     fetchProfile();
   }, []);
 
+  // Add this inside FarmerProfileScreen
+  const onRefresh = React.useCallback(() => {
+    setRefreshing(true);
+    fetchProfile(); // This should trigger a fresh API call
+  }, []);
+
   // 🌟 FIXED: Appended /api router prefix to safely handle user details editing patches
   const handleUpdateProfileData = async (updatedFields: {
     full_name?: string;

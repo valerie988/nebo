@@ -453,7 +453,7 @@ export default function HomeScreen() {
                       resizeMode="cover"
                     />
                   ) : (
-                    <Text className="text-xl">👨‍🌾</Text>
+                    <Ionicons name="person-outline" size={24} color="#1B7344" />
                   )}
                 </View>
                 <View className="flex-1">
@@ -526,7 +526,6 @@ function ProductCard({ item, router }: { item: any; router: any }) {
           <Text className="text-[#2D6A4F] font-black text-[13px]">
             {item.price} XAF
           </Text>
-         
         </View>
       </View>
     </TouchableOpacity>
