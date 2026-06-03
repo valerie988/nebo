@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const API_URL = Constants.expoConfig?.extra?.API_URL;
 
@@ -59,15 +60,18 @@ export default function HomeScreen() {
 
   const fetchHomeData = async () => {
     try {
-      // Pull either the farmer's personal catalog or general catalog using the same exact shape
-      const endpoint = isFarmer ? `${API_URL}/api/products/my` : `${API_URL}/api/products`;
-      const response = await fetch(endpoint);
+      const token =
+        (await AsyncStorage.getItem("nebo_token")) ||
+        (await AsyncStorage.getItem("token"));
+      const response = await fetch(`${API_URL}/api/products/my`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       const data = await response.json();
-      if (response.ok && Array.isArray(data)) {
-        setProducts(data.slice(0, 6)); // Pulling a clean small dataset for home grid matching old layout
+      if (response.ok) {
+        setProducts(data);
       }
-    } catch (err) {
-      console.error(err);
+    } catch (error) {
+      console.error("Error fetching product roster:", error);
     } finally {
       setLoading(false);
       setRefreshing(false);

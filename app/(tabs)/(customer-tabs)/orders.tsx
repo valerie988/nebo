@@ -1,132 +1,250 @@
-import { useEffect, useState } from "react";
-import { ActivityIndicator, FlatList, Text, TouchableOpacity, View, Alert } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import Constants from "expo-constants";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useAuth } from "@/components/context/AuthContext";
 import { Ionicons } from "@expo/vector-icons";
+import Constants from "expo-constants";
+import { useRouter } from "expo-router";
+import React, { useEffect, useMemo, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  RefreshControl,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 const API_URL = Constants.expoConfig?.extra?.API_URL;
 
-// --- Constants ---
-type OrderStatus = "delivered" | "in_transit" | "processing" | "cancelled";
+export default function FarmerOrdersScreen() {
+  const router = useRouter();
+  const { token } = useAuth();
 
-const STATUS_THEME: Record<OrderStatus, { label: string; text: string; bg: string }> = {
-  delivered:  { label: "Delivered",  text: "text-green-800", bg: "bg-green-100" },
-  in_transit: { label: "In transit", text: "text-amber-800", bg: "bg-amber-100" },
-  processing: { label: "Processing", text: "text-blue-800",  bg: "bg-blue-100" },
-  cancelled:  { label: "Cancelled",  text: "text-red-800",   bg: "bg-red-100" },
-};
-
-const FILTERS: { label: string; value: OrderStatus | "all" }[] = [
-  { label: "All",        value: "all" },
-  { label: "Active",     value: "in_transit" },
-  { label: "Processing", value: "processing" },
-  { label: "Delivered",  value: "delivered" },
-  { label: "Cancelled",  value: "cancelled" },
-];
-
-// --- Order Card Component ---
-function OrderCard({ order }: { order: any }) {
-  const theme = STATUS_THEME[order.status as OrderStatus] || STATUS_THEME.processing;
-
-  return (
-    <View className="bg-white rounded-[20px] p-4 mb-2.5 border border-[#F0FAF4]">
-      <View className="flex-row items-center justify-between mb-3">
-        <View className="flex-row items-center">
-          <View className="w-11 h-11 rounded-xl bg-[#F0FAF4] items-center justify-center mr-3">
-            <Text className="text-2xl">📦</Text>
-          </View>
-          <View>
-            <Text className="text-[#1B4332] font-bold text-sm">{order.id}</Text>
-            <Text className="text-[#95D5B2] text-[11px] mt-0.5">{order.date}</Text>
-          </View>
-        </View>
-        <View className={`${theme.bg} rounded-full px-2.5 py-1`}>
-          <Text className={`${theme.text} text-[11px] font-bold`}>{theme.label}</Text>
-        </View>
-      </View>
-      <Text className="text-[#52B788] text-xs leading-5" numberOfLines={1}>{order.items}</Text>
-      <View className="flex-row items-center justify-between mt-3 pt-3 border-t border-[#F0FAF4]">
-        <Text className="text-[#B7E4C7] text-xs">From <Text className="text-[#52B788] font-semibold">{order.farmer}</Text></Text>
-        <Text className="text-[#1B4332] font-extrabold text-[15px]">
-          {Number(order.total).toLocaleString()} <Text className="text-[#95D5B2] font-normal text-[11px]">XAF</Text>
-        </Text>
-      </View>
-    </View>
-  );
-}
-
-// --- Main Screen ---
-export default function OrdersScreen() {
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeFilter, setActiveFilter] = useState<any>("all");
+  const [refreshing, setRefreshing] = useState(false);
 
+  // ---------------- FETCH ORDERS ----------------
   const fetchOrders = async () => {
+    if (!token) {
+      console.log("No token found");
+      return;
+    }
+
     try {
-      const token = await AsyncStorage.getItem("nebo_token");
-      const response = await fetch(`${API_URL}/orders`, {
-        headers: { "Authorization": `Bearer ${token}` },
+      const res = await fetch(`${API_URL}/api/orders/farmer`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
       });
-      if (response.ok) {
-        const data = await response.json();
-        setOrders(data);
-      }
+
+      console.log("STATUS:", res.status);
+
+      const text = await res.text();
+      console.log("RAW RESPONSE:", text);
+
+      const data = JSON.parse(text);
+
+      // 🔥 FIX: support both array OR {orders: []}
+      const normalized = Array.isArray(data)
+        ? data
+        : data.orders || [];
+
+      setOrders(normalized);
     } catch (err) {
-      console.error(err);
+      console.log("Fetch error:", err);
+      Alert.alert("Error", "Failed to load orders");
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
-  useEffect(() => { fetchOrders(); }, []);
+  // ---------------- UPDATE STATUS ----------------
+  const updateStatus = async (orderId: string, status: string) => {
+    try {
+      const res = await fetch(
+        `${API_URL}/api/orders/${orderId}/status`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ status }),
+        }
+      );
 
-  const filtered = activeFilter === "all" ? orders : orders.filter((o) => o.status === activeFilter);
-  const inTransitCount = orders.filter((o) => o.status === "in_transit").length;
+      const data = await res.json();
 
+      if (res.ok) {
+        setOrders((prev) =>
+          prev.map((o) =>
+            o.id === orderId ? { ...o, status } : o
+          )
+        );
+      } else {
+        Alert.alert("Error", data?.detail || "Update failed");
+      }
+    } catch (err) {
+      Alert.alert("Error", "Network error");
+    }
+  };
+
+  // ---------------- INIT ----------------
+  useEffect(() => {
+    fetchOrders();
+  }, [token]);
+
+  // ---------------- STATS ----------------
+  const stats = useMemo(() => {
+    return {
+      processing: orders.filter((o) => o.status === "processing").length,
+      confirmed: orders.filter((o) => o.status === "confirmed").length,
+      in_transit: orders.filter((o) => o.status === "in_transit").length,
+      delivered: orders.filter((o) => o.status === "delivered").length,
+    };
+  }, [orders]);
+
+  // ---------------- LOADING ----------------
   if (loading) {
     return (
-      <View className="flex-1 bg-[#F0FAF4] items-center justify-center">
+      <SafeAreaView className="flex-1 items-center justify-center">
         <ActivityIndicator size="large" color="#1B4332" />
-      </View>
+      </SafeAreaView>
     );
   }
 
+  // ---------------- EMPTY STATE ----------------
+  if (orders.length === 0) {
+    return (
+      <SafeAreaView className="flex-1 items-center justify-center bg-[#F0FAF4]">
+        <Text className="text-[#1B4332] font-bold text-lg">
+          No orders found
+        </Text>
+
+        <TouchableOpacity
+          onPress={fetchOrders}
+          className="mt-4 bg-[#1B4332] px-6 py-3 rounded-xl"
+        >
+          <Text className="text-white">Refresh</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  }
+
+  // ---------------- UI ----------------
   return (
-    <View className="flex-1 bg-[#F0FAF4]">
-      <SafeAreaView className="flex-1">
-        <View className="px-5 pt-5 pb-4">
-          <Text className="text-[#1B4332] text-[32px] font-black tracking-tighter">My Orders</Text>
+    <SafeAreaView className="flex-1 bg-[#F0FAF4]">
+
+      {/* HEADER */}
+      <View className="px-6 pt-4 flex-row items-center">
+        <TouchableOpacity onPress={() => router.back()}>
+          <Ionicons name="arrow-back" size={22} color="#1B4332" />
+        </TouchableOpacity>
+
+        <Text className="ml-4 text-2xl font-black text-[#1B4332]">
+          Farmer Orders
+        </Text>
+      </View>
+
+      {/* STATS */}
+      <View className="px-6 flex-row gap-2 mt-4">
+        <View className="flex-1 bg-[#1B4332] p-4 rounded-2xl">
+          <Text className="text-white font-bold">{stats.processing}</Text>
+          <Text className="text-white text-xs">Processing</Text>
         </View>
 
-        <View className="h-10 mb-3.5">
-          <FlatList
-            data={FILTERS}
-            keyExtractor={(item) => item.value}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ paddingHorizontal: 20, gap: 8 }}
-            renderItem={({ item }) => (
+        <View className="flex-1 bg-[#2D6A4F] p-4 rounded-2xl">
+          <Text className="text-white font-bold">{stats.confirmed}</Text>
+          <Text className="text-white text-xs">Confirmed</Text>
+        </View>
+
+        <View className="flex-1 bg-[#52B788] p-4 rounded-2xl">
+          <Text className="text-white font-bold">{stats.delivered}</Text>
+          <Text className="text-white text-xs">Delivered</Text>
+        </View>
+      </View>
+
+      {/* LIST */}
+      <FlatList
+        data={orders}
+        keyExtractor={(item) => item.id}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={fetchOrders}
+          />
+        }
+        contentContainerStyle={{
+          padding: 20,
+          paddingBottom: 40,
+        }}
+        renderItem={({ item }) => (
+          <View className="bg-white p-5 mb-4 rounded-2xl border border-[#D8F3DC]">
+
+            <Text className="font-black text-[#1B4332]">
+              Order #{item.id?.slice(-6)}
+            </Text>
+
+            <Text className="text-[#2D6A4F] mt-1">
+              Customer: {item.customer_name || "Unknown"}
+            </Text>
+
+            <Text className="text-lg font-black mt-2">
+              {item.total_amount} XAF
+            </Text>
+
+            <Text className="text-xs mt-1 text-gray-500 capitalize">
+              {item.status}
+            </Text>
+
+            {item.status === "processing" && (
+              <View className="flex-row gap-2 mt-4">
+                <TouchableOpacity
+                  onPress={() => updateStatus(item.id, "confirmed")}
+                  className="flex-1 bg-[#1B4332] p-3 rounded-xl"
+                >
+                  <Text className="text-white text-center font-bold">
+                    Confirm
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => updateStatus(item.id, "cancelled")}
+                  className="flex-1 bg-red-500 p-3 rounded-xl"
+                >
+                  <Text className="text-white text-center font-bold">
+                    Cancel
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {item.status === "confirmed" && (
               <TouchableOpacity
-                onPress={() => setActiveFilter(item.value)}
-                className={`rounded-full px-[18px] justify-center h-full ${activeFilter === item.value ? "bg-[#1B4332]" : "bg-white"}`}
+                onPress={() => updateStatus(item.id, "in_transit")}
+                className="mt-4 bg-[#52B788] p-3 rounded-xl"
               >
-                <Text className={`text-[13px] font-semibold ${activeFilter === item.value ? "text-white" : "text-[#1B4332]"}`}>
-                  {item.label}
+                <Text className="text-white text-center font-bold">
+                  Mark In Transit
                 </Text>
               </TouchableOpacity>
             )}
-          />
-        </View>
 
-        <FlatList
-          data={filtered}
-          keyExtractor={(item) => item.id.toString()}
-          contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 32 }}
-          ListEmptyComponent={<Text className="text-center mt-10 text-[#52B788]">No orders found.</Text>}
-          renderItem={({ item }) => <OrderCard order={item} />}
-        />
-      </SafeAreaView>
-    </View>
+            {item.status === "in_transit" && (
+              <TouchableOpacity
+                onPress={() => updateStatus(item.id, "delivered")}
+                className="mt-4 bg-[#1B4332] p-3 rounded-xl"
+              >
+                <Text className="text-white text-center font-bold">
+                  Complete Order
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+      />
+    </SafeAreaView>
   );
 }

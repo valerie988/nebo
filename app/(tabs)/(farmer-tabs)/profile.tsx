@@ -5,6 +5,7 @@ import Constants from "expo-constants";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
+import * as SecureStore from "expo-secure-store";
 import {
   ActivityIndicator,
   Alert,
@@ -127,10 +128,9 @@ export default function FarmerProfileScreen() {
   // Add this inside FarmerProfileScreen
   const onRefresh = React.useCallback(() => {
     setRefreshing(true);
-    fetchProfile(); // This should trigger a fresh API call
+    fetchProfile(); 
   }, []);
 
-  // 🌟 FIXED: Appended /api router prefix to safely handle user details editing patches
   const handleUpdateProfileData = async (updatedFields: {
     full_name?: string;
     location?: string;
@@ -426,10 +426,10 @@ export default function FarmerProfileScreen() {
           <View className="px-6 flex-row mb-6">
             <QuickLink
               icon="shopping-bag"
-              label="My Store"
-              subtitle="Manage stock"
+              label="My Orders"
+              subtitle="Manage Orders"
               accent="#2D6A4F"
-              onPress={() => router.push("/(tabs)/(farmer-tabs)/marketplace")}
+              onPress={() => router.push("/farmer/orders")}
             />
             <QuickLink
               icon="sliders"

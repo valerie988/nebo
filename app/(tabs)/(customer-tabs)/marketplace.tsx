@@ -1,3 +1,4 @@
+import MessageFarmerButton from "@/components/MessageFarmerButton";
 import { Ionicons } from "@expo/vector-icons";
 import Constants from "expo-constants";
 import { useRouter } from "expo-router";
@@ -215,28 +216,18 @@ function LargeProductCard({ item, router }: { item: any; router: any }) {
 
         <View className="flex-row gap-3">
           <TouchableOpacity
-            onPress={() => {
-              // Change the path to an absolute route
-              router.push(`/product/${item.id}`);
-            }}
-            className="flex-1 bg-[#F0FAF4] py-3 rounded-xl items-center border border-[#D8F3DC]"
+            onPress={() => router.push(`/product/${item.id}`)}
+            className="flex-1 bg-[#1B4332] py-4 rounded-xl items-center border border-[#D8F3DC]"
           >
-            <Text className="text-[#1B4332] font-bold">View More</Text>
+            <Text className="text-white font-bold">View More</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() =>
-              router.push({
-                pathname: "/chat/room",
-                params: {
-                  recipientId: item.farmer_id,
-                  recipientName: item.farmer_name,
-                },
-              })
-            }
-            className="flex-1 bg-[#1B4332] py-3 rounded-xl items-center"
-          >
-            <Text className="text-white font-bold">Contact Farmer</Text>
-          </TouchableOpacity>
+
+          {/* Using the component directly */}
+          <MessageFarmerButton
+            farmerId={item.farmer_id}
+            farmerName={item.farmer_name || item.farmer?.full_name || "Farmer"}
+            variant="button"
+          />
         </View>
       </View>
     </View>

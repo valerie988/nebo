@@ -1,8 +1,9 @@
 import { useAuth } from "@/components/context/AuthContext";
+import MessageFarmerButton from "@/components/MessageFarmerButton";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import Constants from "expo-constants";
 import { useRouter } from "expo-router";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { JSX, useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Dimensions,
@@ -431,18 +432,8 @@ export default function HomeScreen() {
             </View>
 
             {farmers.map((farmer) => (
-              <TouchableOpacity
+              <View
                 key={farmer.id}
-                activeOpacity={0.8}
-                onPress={() =>
-                  router.push({
-                    pathname: "/chat/room",
-                    params: {
-                      recipientId: farmer.id,
-                      recipientName: farmer.full_name || farmer.name,
-                    },
-                  })
-                }
                 className="flex-row items-center bg-white rounded-2xl p-4 mb-3 border border-[#D8F3DC] shadow-sm"
               >
                 <View className="w-12 h-12 rounded-xl bg-[#F0FAF4] items-center justify-center mr-3.5 border border-[#D8F3DC] overflow-hidden">
@@ -456,6 +447,7 @@ export default function HomeScreen() {
                     <Ionicons name="person-outline" size={24} color="#1B7344" />
                   )}
                 </View>
+
                 <View className="flex-1">
                   <Text className="text-[#1B4332] font-black text-[14px]">
                     {farmer.full_name || farmer.name}
@@ -472,13 +464,14 @@ export default function HomeScreen() {
                     </Text>
                   </View>
                 </View>
-                <View className="bg-[#F0FAF4] px-3 py-2 rounded-xl border border-[#D8F3DC] flex-row items-center gap-1">
-                  <Feather name="message-circle" size={14} color="#2D6A4F" />
-                  <Text className="text-[#2D6A4F] font-black text-xs uppercase tracking-wider">
-                    Chat
-                  </Text>
-                </View>
-              </TouchableOpacity>
+
+                {/* Your Custom Button */}
+                <MessageFarmerButton
+                  farmerId={farmer.id}
+                  farmerName={farmer.full_name || farmer.name || "Farmer"}
+                  variant="icon"
+                />
+              </View>
             ))}
           </View>
         </ScrollView>
@@ -493,7 +486,7 @@ function ProductCard({ item, router }: { item: any; router: any }) {
 
   return (
     <TouchableOpacity
-      onPress={() => router.push(`/marketplace/product/${item.id}`)}
+      onPress={() => router.push(`/product/${item.id}`)}
       activeOpacity={0.85}
       className="w-40 rounded-[28px] p-2 mr-3.5 border border-[#D8F3DC] bg-white shadow-sm"
     >

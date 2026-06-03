@@ -1,57 +1,128 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, WebSocket, WebSocketDisconnect
 from typing import List
+from sqlalchemy.orm import Session, joinedload
+from datetime import datetime, timezone
+import uuid
+import asyncio
+
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.schemas.schemas import OrderOut, OrderCreate, OrderStatusUpdate
-from sqlalchemy.orm import Session
-# Import your Order model here
+from app.models.order import Order, OrderItem
+from app.core.ws_manager import manager
 
 router = APIRouter()
 
-# 1. Get all orders for the authenticated user
-@router.get("/", response_model=List[OrderOut])
-async def get_orders(
+# -------------------------
+# CUSTOMER ORDERS
+# -------------------------
+@router.get("", response_model=List[OrderOut])
+async def get_orders(db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+    return db.query(Order).options(
+        joinedload(Order.farmer),
+        joinedload(Order.order_items).joinedload(OrderItem.product)
+    ).filter(Order.customer_id == current_user.id).all()
+
+# -------------------------
+# FARMER ORDERS
+# -------------------------
+@router.get("/farmer", response_model=List[OrderOut])
+async def get_farmer_orders(
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_user)
+    current_farmer=Depends(get_current_user)
 ):
-    # Query logic: filter by current_user.id (customer_id or farmer_id)
-    return []
+    return db.query(Order).filter(
+        Order.farmer_id == current_farmer.id
+    ).all()
 
-# 2. Get specific order details
+# -------------------------
+# ORDER DETAIL
+# -------------------------
 @router.get("/{order_id}", response_model=OrderOut)
-async def get_order_detail(order_id: str, db: Session = Depends(get_db)):
-    # Query logic: fetch order by ID
-    return {
-    "id": order_id, 
-    "status": "processing", 
-    "customer_id": customer_id, 
-    "total_amount": 0.0, 
-    "items": []
-}
+async def get_order_detail(order_id: str, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+    order = db.query(Order).filter(Order.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    return order
 
-# 3. Create a new order
+# -------------------------
+# CREATE ORDER
+# -------------------------
 @router.post("/", response_model=OrderOut, status_code=status.HTTP_201_CREATED)
 async def create_order(
     payload: OrderCreate,
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_user)
+    current_user=Depends(get_current_user)
 ):
-    return {
-    "id": "new_id",
-    "customer_id": "example_customer_id",
-    "farmer_id": "example_farmer_id",
-    "total_amount": 0.0,
-    "status": "processing",
-    "items": [],
-    "created_at": datetime.utcnow()
-}
+    # Create the Order header without passing invalid fields
+    new_order = Order(
+        id=str(uuid.uuid4()),
+        customer_id=current_user.id,
+        farmer_id=payload.farmer_id,
+        total_amount=payload.total_amount,
+        status="processing",
+        created_at=datetime.now(timezone.utc)
+    )
 
-# 4. Update order status
+    db.add(new_order)
+    db.flush()  # Ensures new_order.id is generated for the OrderItem link
+
+    # Create the related OrderItem
+    new_item = OrderItem(
+        id=str(uuid.uuid4()),
+        order_id=new_order.id,
+        product_id=payload.product_id,
+        quantity=payload.quantity,
+        unit_price=payload.total_amount / payload.quantity
+    )
+
+    db.add(new_item)
+    db.commit()
+    db.refresh(new_order)
+
+    return new_order
+
+# -------------------------
+# UPDATE STATUS
+# -------------------------
 @router.patch("/{order_id}/status", response_model=OrderOut)
-async def update_status(
+async def update_order_status(
     order_id: str,
-    payload: OrderStatusUpdate,
-    db: Session = Depends(get_db)
+    update_data: OrderStatusUpdate,
+    db: Session = Depends(get_db),
+    current_farmer=Depends(get_current_user)
 ):
+    order = db.query(Order).filter(Order.id == order_id).first()
+    
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    if order.farmer_id != current_farmer.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
 
-    return {"id": order_id, "status": payload.status}
+    # FIX: Extract the string value if update_data.status is an Enum
+    status_value = update_data.status.value if hasattr(update_data.status, "value") else update_data.status
+    order.status = status_value
+
+    db.commit()
+    db.refresh(order)
+
+    asyncio.create_task(manager.broadcast({
+        "type": "order_updated",
+        "order_id": order.id,
+        "status": order.status,
+        "customer_id": order.customer_id,
+        "farmer_id": order.farmer_id
+    }))
+    return order
+
+# -------------------------
+# WEBSOCKET ENDPOINT
+# -------------------------
+@router.websocket("/ws/orders")
+async def orders_ws(websocket: WebSocket):
+    await manager.connect(websocket)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)

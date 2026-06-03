@@ -64,7 +64,7 @@ app.include_router(users_router, prefix="/api")
 app.include_router(products_router, prefix="/api")
 # FIXED: Using the properly named admin_router variable here
 app.include_router(admin_router, prefix="/api")
-app.include_router(orders.router, prefix="/orders", tags=["orders"])
+app.include_router(orders.router, prefix="/api/orders", tags=["orders"])
 
 # 6. Health check endpoints
 @app.get("/health", tags=["health"])

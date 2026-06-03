@@ -21,29 +21,34 @@ function RootLayoutNav() {
   const segments = useSegments();
   const router = useRouter();
 
-  useEffect(() => {
-    if (isLoading) return;
+ useEffect(() => {
+  console.log("ROOT NAV", {
+    token,
+    role,
+    isLoading,
+    segments,
+  });
 
-    const inAuthGroup = segments[0] === "(auth)";
+  if (isLoading) return;
 
-    // User not logged in
-    if (!token) {
-      if (!inAuthGroup) {
-        router.replace("/(auth)/login");
-      }
-      return;
+  const inAuthGroup = segments[0] === "(auth)";
+
+  if (!token) {
+    if (!inAuthGroup) {
+      router.replace("/(auth)/login");
     }
+    return;
+  }
 
-    // User logged in but currently on auth pages
-    if (inAuthGroup) {
-      const homePath =
-        role === "farmer"
-          ? "/(tabs)/(farmer-tabs)/home"
-          : "/(tabs)/(customer-tabs)/home";
+  if (inAuthGroup) {
+    const homePath =
+      role === "farmer"
+        ? "/(tabs)/(farmer-tabs)/home"
+        : "/(tabs)/(customer-tabs)/home";
 
-      router.replace(homePath as any);
-    }
-  }, [token, role, isLoading, segments, router]);
+    router.replace(homePath as any);
+  }
+}, [token, role, isLoading, segments]);
 
   if (isLoading) {
     return (
