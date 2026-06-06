@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field
 from app.services.email import send_order_notification_email
 from cloudinary_config import upload_product_image
 
-# --- Pydantic Schema for Direct Frontend Cloudinary JSON Payload ---
+
 class ProductCreateJSON(BaseModel):
     name: str
     category: str

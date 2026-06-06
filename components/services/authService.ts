@@ -19,6 +19,10 @@ export const authService = {
 
     return data;
   },
+  signup: async (userData: any) => {
+    const { data } = await apiClient.post("/auth/signup", userData);
+    return data;
+  },
 };
 
 // Automatically attach token

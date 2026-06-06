@@ -1,6 +1,8 @@
 import secrets
+import cloudinary
+import cloudinary.uploader
 from datetime import datetime, timedelta, timezone
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, status
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, status, UploadFile,File
 from sqlalchemy.orm import Session
 from passlib.context import CryptContext
 
@@ -16,7 +18,7 @@ from app.schemas.schemas import (
     RefreshRequest, UserUpdate, VerifyEmailRequest,
     ForgotPasswordRequest, ResetPasswordRequest, UserOut
 )
-
+from app.core.security import get_current_user
 from app.models.product import Product
 from app.models.order import Order
 # Ensure UserOutWithStats is defined in your schemas.py
@@ -198,3 +200,17 @@ async def update_profile(
     db.commit()
     db.refresh(current_user)
     return current_user
+
+@router.post("/verify")
+async def verify_identity(
+    id_card: UploadFile = File(...), 
+    selfie: UploadFile = File(...),
+    current_user = Depends(get_current_user) # Ensure you have this
+):
+    id_upload = cloudinary.uploader.upload(id_card.file)
+    selfie_upload = cloudinary.uploader.upload(selfie.file)
+
+    id_url = id_upload.get("secure_url")
+    selfie_url = selfie_upload.get("secure_url")
+
+    return {"message": "Upload successful", "id_url": id_url, "selfie_url": selfie_url}

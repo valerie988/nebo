@@ -23,21 +23,20 @@ async def get_orders(db: Session = Depends(get_db), current_user=Depends(get_cur
         joinedload(Order.order_items).joinedload(OrderItem.product)
     ).filter(Order.customer_id == current_user.id).all()
 
-# -------------------------
-# FARMER ORDERS
-# -------------------------
+
 @router.get("/farmer", response_model=List[OrderOut])
 async def get_farmer_orders(
     db: Session = Depends(get_db),
     current_farmer=Depends(get_current_user)
 ):
-    return db.query(Order).filter(
-        Order.farmer_id == current_farmer.id
-    ).all()
+    # Print these to your terminal to compare them
+    print(f"DEBUG: Querying orders for farmer_id: {current_farmer.id}")
+    
+    # Force conversion to string for comparison
+    orders = db.query(Order).filter(Order.farmer_id == str(current_farmer.id)).all()
+    
+    return orders
 
-# -------------------------
-# ORDER DETAIL
-# -------------------------
 @router.get("/{order_id}", response_model=OrderOut)
 async def get_order_detail(order_id: str, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     order = db.query(Order).filter(Order.id == order_id).first()
@@ -82,9 +81,6 @@ async def create_order(
 
     return new_order
 
-# -------------------------
-# UPDATE STATUS
-# -------------------------
 @router.patch("/{order_id}/status", response_model=OrderOut)
 async def update_order_status(
     order_id: str,
@@ -115,9 +111,16 @@ async def update_order_status(
     }))
     return order
 
-# -------------------------
-# WEBSOCKET ENDPOINT
-# -------------------------
+@router.delete("/{order_id}")
+async def delete_order(order_id: str, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+    order = db.query(Order).filter(Order.id == order_id, Order.customer_id == current_user.id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    db.delete(order)
+    db.commit()
+    return {"message": "Order deleted"}
+    
 @router.websocket("/ws/orders")
 async def orders_ws(websocket: WebSocket):
     await manager.connect(websocket)

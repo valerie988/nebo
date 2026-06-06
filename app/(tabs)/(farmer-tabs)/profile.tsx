@@ -91,7 +91,7 @@ export default function FarmerProfileScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Verification Modal UI States
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [idPhoto, setIdPhoto] = useState<string | null>(null);
   const [selfiePhoto, setSelfiePhoto] = useState<string | null>(null);
@@ -132,6 +132,7 @@ export default function FarmerProfileScreen() {
   }, []);
 
   const handleUpdateProfileData = async (updatedFields: {
+
     full_name?: string;
     location?: string;
   }) => {
@@ -165,29 +166,32 @@ export default function FarmerProfileScreen() {
     }
   };
 
-  const pickImage = async (target: "id" | "selfie") => {
-    const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
+ const pickImage = async (target: "id" | "selfie") => {
+  // Use Alert to let user choose source
+  Alert.alert("Select Image", "Choose a source", [
+    { text: "Camera", onPress: () => launchImage(target, true) },
+    { text: "Gallery", onPress: () => launchImage(target, false) },
+    { text: "Cancel", style: "cancel" },
+  ]);
+};
 
-    if (permissionResult.granted === false) {
-      Alert.alert(
-        "Permission Required",
-        "Camera access is needed to capture identity verification files.",
-      );
-      return;
-    }
-
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: target === "id" ? [16, 10] : [1, 1],
-      quality: 0.7,
-    });
-
-    if (!result.canceled && result.assets?.[0]?.uri) {
-      if (target === "id") setIdPhoto(result.assets[0].uri);
-      if (target === "selfie") setSelfiePhoto(result.assets[0].uri);
-    }
+const launchImage = async (target: "id" | "selfie", useCamera: boolean) => {
+  const options: ImagePicker.ImagePickerOptions = {
+    mediaTypes: ImagePicker.MediaTypeOptions.Images,
+    allowsEditing: true,
+    aspect: target === "id" ? [16, 10] : [1, 1],
+    quality: 0.7,
   };
+
+  const result = useCamera 
+    ? await ImagePicker.launchCameraAsync(options)
+    : await ImagePicker.launchImageLibraryAsync(options);
+
+  if (!result.canceled && result.assets?.[0]?.uri) {
+    if (target === "id") setIdPhoto(result.assets[0].uri);
+    if (target === "selfie") setSelfiePhoto(result.assets[0].uri);
+  }
+};
 
   const handleUploadVerification = async () => {
     if (!idPhoto || !selfiePhoto) {

@@ -1,80 +1,83 @@
-import { Tabs } from "expo-router";
-import { View, Text, TouchableOpacity } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import { Tabs } from "expo-router";
+import { Text, TouchableOpacity, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-interface TabIconProps {
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  active: boolean;
-}
-
-function TabIcon({ icon, label, active }: TabIconProps) {
-  // Logic to switch from outline to solid when active
+// 1. Icon Component (remains the same)
+function TabIcon({ icon, label, active }: { icon: keyof typeof Ionicons.glyphMap; label: string; active: boolean }) {
   const iconName = active ? icon.replace("-outline", "") : icon;
-
   return (
     <View className="items-center pt-1.5">
-      <Ionicons 
-        name={iconName as any} 
-        size={22} 
-        color={active ? "#1B4332" : "#95D5B2"} 
-      />
-      <Text
-        className={`text-[10px] mt-1 ${
-          active ? "font-bold text-[#1B4332]" : "font-medium text-[#95D5B2]"
-        }`}
-      >
+      <Ionicons name={iconName as any} size={22} color={active ? "#1B4332" : "#95D5B2"} />
+      <Text className={`text-[10px] mt-1 ${active ? "font-bold text-[#1B4332]" : "font-medium text-[#95D5B2]"}`}>
         {label}
       </Text>
     </View>
   );
 }
 
+// 2. Custom Tab Bar Component
 function CustomTabBar({ state, navigation }: any) {
   const insets = useSafeAreaInsets();
-  
-  const tabs = [
-    { name: "home",        label: "Home",    icon: "home-outline" },
-    { name: "marketplace", label: "Market",  icon: "storefront-outline" },
-    { name: "orders",      label: "Orders",  icon: "receipt-outline" },
-    { name: "chat",        label: "Chat",    icon: "chatbubbles-outline" },
-    { name: "profile",     label: "Profile", icon: "person-outline" },
-  ];
+
+  // THIS MUST MATCH YOUR Tabs.Screen names exactly
+  const tabData: Record<string, { label: string; icon: keyof typeof Ionicons.glyphMap }> = {
+    home:        { label: "Home",    icon: "home-outline" },
+    marketplace: { label: "Market",  icon: "storefront-outline" },
+    orders:      { label: "Orders",  icon: "receipt-outline" },
+    chat:        { label: "Chat",    icon: "chatbubbles-outline" },
+    "chat/index": { label: "Chat",   icon: "chatbubbles-outline" },
+    profile:     { label: "Profile", icon: "person-outline" },
+  };
 
   return (
     <View
       style={{ paddingBottom: insets.bottom + 6 }}
-      className="flex-row bg-white pt-2 border-t border-[#F0FAF4] shadow-lg shadow-black/10 elevation-5"
+      className="flex-row bg-white pt-2 border-t border-[#F0FAF4] shadow-lg"
     >
-      {tabs.map((tab, i) => (
-        <TouchableOpacity
-          key={tab.name}
-          onPress={() => navigation.navigate(tab.name)}
-          activeOpacity={0.7}
-          className="flex-1 items-center"
-        >
-          <TabIcon 
-            icon={tab.icon as any} 
-            label={tab.label} 
-            active={state.index === i} 
-          />
-        </TouchableOpacity>
-      ))}
+      {state.routes.map((route: any, index: number) => {
+        // Look up the tab info
+        const currentTab = tabData[route.name];
+        
+        // If route name is not in our whitelist, don't show it (e.g., chat/[id])
+        if (!currentTab) return null;
+
+        const isFocused = state.index === index;
+
+        return (
+          <TouchableOpacity
+            key={route.key}
+            onPress={() => navigation.navigate(route.name)}
+            className="flex-1 items-center"
+          >
+            <TabIcon
+              icon={currentTab.icon}
+              label={currentTab.label}
+              active={isFocused}
+            />
+          </TouchableOpacity>
+        );
+      })}
     </View>
   );
 }
+
+// 3. Main Layout
 export default function CustomerTabsLayout() {
   return (
     <Tabs
       tabBar={(props) => <CustomTabBar {...props} />}
       screenOptions={{ headerShown: false }}
     >
-      <Tabs.Screen name="home" options={{ title: "Home" }} />
-      <Tabs.Screen name="marketplace" options={{ title: "Market" }} />
-      <Tabs.Screen name="orders" options={{ title: "Orders" }} />
-      <Tabs.Screen name="chat" options={{ title: "Chat" }} />
-      <Tabs.Screen name="profile" options={{ title: "Profile" }} />
+      <Tabs.Screen name="home" />
+      <Tabs.Screen name="marketplace" />
+      <Tabs.Screen name="orders" />
+      <Tabs.Screen name="chat" />
+      <Tabs.Screen name="profile" />
+
+      {/* Hide these from the tab bar */}
+      <Tabs.Screen name="chat/[id]" options={{ href: null }} />
+      <Tabs.Screen name="product/[id]" options={{ href: null }} />
     </Tabs>
   );
 }

@@ -16,7 +16,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 const API_URL = Constants.expoConfig?.extra?.API_URL;
 
-// ✅ Order status flow (safe transitions)
 const allowedTransitions: Record<string, string[]> = {
   processing: ["confirmed", "cancelled"],
   confirmed: ["in_transit", "cancelled"],

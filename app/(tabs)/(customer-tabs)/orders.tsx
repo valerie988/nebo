@@ -1,249 +1,134 @@
-import { useAuth } from "@/components/context/AuthContext";
-import { Ionicons } from "@expo/vector-icons";
-import Constants from "expo-constants";
-import { useRouter } from "expo-router";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Image,
   RefreshControl,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { Ionicons, Feather } from "@expo/vector-icons";
+import Constants from "expo-constants";
+import { useRouter } from "expo-router";
+import { useAuth } from "@/components/context/AuthContext";
 
 const API_URL = Constants.expoConfig?.extra?.API_URL;
 
-export default function FarmerOrdersScreen() {
+export default function CustomerOrdersScreen() {
   const router = useRouter();
   const { token } = useAuth();
-
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  // ---------------- FETCH ORDERS ----------------
   const fetchOrders = async () => {
-    if (!token) {
-      console.log("No token found");
-      return;
-    }
-
+    if (!token) return;
     try {
-      const res = await fetch(`${API_URL}/api/orders/farmer`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+      const res = await fetch(`${API_URL}/api/orders`, {
+        headers: { Authorization: `Bearer ${token}` },
       });
-
-      console.log("STATUS:", res.status);
-
-      const text = await res.text();
-      console.log("RAW RESPONSE:", text);
-
-      const data = JSON.parse(text);
-
-      // 🔥 FIX: support both array OR {orders: []}
-      const normalized = Array.isArray(data)
-        ? data
-        : data.orders || [];
-
-      setOrders(normalized);
+      const data = await res.json();
+      setOrders(Array.isArray(data) ? data : []);
     } catch (err) {
-      console.log("Fetch error:", err);
-      Alert.alert("Error", "Failed to load orders");
+      Alert.alert("Error", "Could not load your orders.");
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   };
 
-  // ---------------- UPDATE STATUS ----------------
-  const updateStatus = async (orderId: string, status: string) => {
-    try {
-      const res = await fetch(
-        `${API_URL}/api/orders/${orderId}/status`,
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ status }),
-        }
-      );
-
-      const data = await res.json();
-
-      if (res.ok) {
-        setOrders((prev) =>
-          prev.map((o) =>
-            o.id === orderId ? { ...o, status } : o
-          )
-        );
-      } else {
-        Alert.alert("Error", data?.detail || "Update failed");
-      }
-    } catch (err) {
-      Alert.alert("Error", "Network error");
-    }
+  const deleteOrder = async (orderId: string) => {
+    Alert.alert("Cancel Order", "Are you sure you want to cancel this order?", [
+      { text: "No", style: "cancel" },
+      {
+        text: "Yes, Cancel",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            const res = await fetch(`${API_URL}/api/orders/${orderId}`, {
+              method: "DELETE",
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            if (res.ok) {
+              setOrders((prev) => prev.filter((o) => o.id !== orderId));
+            } else {
+              Alert.alert("Error", "Could not cancel order.");
+            }
+          } catch (err) {
+            Alert.alert("Error", "Network error.");
+          }
+        },
+      },
+    ]);
   };
 
-  // ---------------- INIT ----------------
-  useEffect(() => {
-    fetchOrders();
-  }, [token]);
+  useEffect(() => { fetchOrders(); }, [token]);
 
-  // ---------------- STATS ----------------
-  const stats = useMemo(() => {
-    return {
-      processing: orders.filter((o) => o.status === "processing").length,
-      confirmed: orders.filter((o) => o.status === "confirmed").length,
-      in_transit: orders.filter((o) => o.status === "in_transit").length,
-      delivered: orders.filter((o) => o.status === "delivered").length,
-    };
-  }, [orders]);
+  if (loading) return <ActivityIndicator className="flex-1" size="large" color="#1B4332" />;
 
-  // ---------------- LOADING ----------------
-  if (loading) {
-    return (
-      <SafeAreaView className="flex-1 items-center justify-center">
-        <ActivityIndicator size="large" color="#1B4332" />
-      </SafeAreaView>
-    );
-  }
-
-  // ---------------- EMPTY STATE ----------------
-  if (orders.length === 0) {
-    return (
-      <SafeAreaView className="flex-1 items-center justify-center bg-[#F0FAF4]">
-        <Text className="text-[#1B4332] font-bold text-lg">
-          No orders found
-        </Text>
-
-        <TouchableOpacity
-          onPress={fetchOrders}
-          className="mt-4 bg-[#1B4332] px-6 py-3 rounded-xl"
-        >
-          <Text className="text-white">Refresh</Text>
-        </TouchableOpacity>
-      </SafeAreaView>
-    );
-  }
-
-  // ---------------- UI ----------------
   return (
     <SafeAreaView className="flex-1 bg-[#F0FAF4]">
-
-      {/* HEADER */}
-      <View className="px-6 pt-4 flex-row items-center">
-        <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={22} color="#1B4332" />
+      <View className="px-6 pt-4 pb-2 flex-row items-center">
+        <TouchableOpacity 
+          onPress={() => router.back()} 
+          className="w-10 h-10 bg-white rounded-full items-center justify-center border border-[#D8F3DC]"
+        >
+          <Ionicons name="arrow-back" size={20} color="#1B4332" />
         </TouchableOpacity>
-
-        <Text className="ml-4 text-2xl font-black text-[#1B4332]">
-          Farmer Orders
-        </Text>
+        <Text className="ml-4 text-2xl font-black text-[#1B4332]">My Orders</Text>
       </View>
 
-      {/* STATS */}
-      <View className="px-6 flex-row gap-2 mt-4">
-        <View className="flex-1 bg-[#1B4332] p-4 rounded-2xl">
-          <Text className="text-white font-bold">{stats.processing}</Text>
-          <Text className="text-white text-xs">Processing</Text>
-        </View>
-
-        <View className="flex-1 bg-[#2D6A4F] p-4 rounded-2xl">
-          <Text className="text-white font-bold">{stats.confirmed}</Text>
-          <Text className="text-white text-xs">Confirmed</Text>
-        </View>
-
-        <View className="flex-1 bg-[#52B788] p-4 rounded-2xl">
-          <Text className="text-white font-bold">{stats.delivered}</Text>
-          <Text className="text-white text-xs">Delivered</Text>
-        </View>
-      </View>
-
-      {/* LIST */}
       <FlatList
         data={orders}
         keyExtractor={(item) => item.id}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={fetchOrders}
-          />
-        }
-        contentContainerStyle={{
-          padding: 20,
-          paddingBottom: 40,
-        }}
-        renderItem={({ item }) => (
-          <View className="bg-white p-5 mb-4 rounded-2xl border border-[#D8F3DC]">
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={fetchOrders} />}
+        contentContainerStyle={{ padding: 20 }}
+        renderItem={({ item }) => {
+          const product = item.order_items?.[0]?.product;
+          return (
+            <View className="bg-white p-4 mb-3 rounded-[24px] border border-[#D8F3DC]">
+              <View className="flex-row items-center">
+                {/* Product Image */}
+                <Image 
+                  source={{ uri: product?.image_url || 'https://via.placeholder.com/100' }} 
+                  className="w-16 h-16 rounded-xl bg-[#F0FAF4]"
+                />
+                
+                {/* Order Details */}
+                <View className="flex-1 ml-3">
+                  <Text className="text-[#1B4332] font-black text-sm">{product?.name || "Product"}</Text>
+                  <Text className="text-[#52B788] text-[10px] font-bold">{item.farmer?.full_name || "Merchant"}</Text>
+                  <Text className="text-[#1B4332] font-black text-sm mt-0.5">{item.total_amount} XAF</Text>
+                </View>
 
-            <Text className="font-black text-[#1B4332]">
-              Order #{item.id?.slice(-6)}
-            </Text>
-
-            <Text className="text-[#2D6A4F] mt-1">
-              Customer: {item.customer_name || "Unknown"}
-            </Text>
-
-            <Text className="text-lg font-black mt-2">
-              {item.total_amount} XAF
-            </Text>
-
-            <Text className="text-xs mt-1 text-gray-500 capitalize">
-              {item.status}
-            </Text>
-
-            {item.status === "processing" && (
-              <View className="flex-row gap-2 mt-4">
-                <TouchableOpacity
-                  onPress={() => updateStatus(item.id, "confirmed")}
-                  className="flex-1 bg-[#1B4332] p-3 rounded-xl"
-                >
-                  <Text className="text-white text-center font-bold">
-                    Confirm
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  onPress={() => updateStatus(item.id, "cancelled")}
-                  className="flex-1 bg-red-500 p-3 rounded-xl"
-                >
-                  <Text className="text-white text-center font-bold">
-                    Cancel
-                  </Text>
-                </TouchableOpacity>
+                {/* Status and Action */}
+                <View className="items-end justify-between h-16">
+                  <View className="bg-[#F0FAF4] px-2 py-1 rounded-full">
+                    <Text className="text-[#2D6A4F] text-[9px] font-bold uppercase">{item.status.replace("_", " ")}</Text>
+                  </View>
+                  
+                  {item.status === "processing" && (
+                    <TouchableOpacity 
+                      onPress={() => deleteOrder(item.id)}
+                      className="bg-red-50 px-3 py-1.5 rounded-lg"
+                    >
+                      <Text className="text-red-600 font-bold text-[10px]">Cancel</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
               </View>
-            )}
-
-            {item.status === "confirmed" && (
-              <TouchableOpacity
-                onPress={() => updateStatus(item.id, "in_transit")}
-                className="mt-4 bg-[#52B788] p-3 rounded-xl"
-              >
-                <Text className="text-white text-center font-bold">
-                  Mark In Transit
-                </Text>
-              </TouchableOpacity>
-            )}
-
-            {item.status === "in_transit" && (
-              <TouchableOpacity
-                onPress={() => updateStatus(item.id, "delivered")}
-                className="mt-4 bg-[#1B4332] p-3 rounded-xl"
-              >
-                <Text className="text-white text-center font-bold">
-                  Complete Order
-                </Text>
-              </TouchableOpacity>
-            )}
+            </View>
+          );
+        }}
+        ListEmptyComponent={
+          <View className="items-center mt-20">
+            <Feather name="shopping-bag" size={48} color="#D8F3DC" />
+            <Text className="text-[#95D5B2] mt-4 font-bold">No orders found</Text>
           </View>
-        )}
+        }
       />
     </SafeAreaView>
   );

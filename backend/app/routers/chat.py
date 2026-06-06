@@ -1,17 +1,3 @@
-"""
-chat_router.py
-─────────────────────────────────────────────────────────────────────────────
-Real-time WebSocket chat + REST fallback.
-Messages older than 3 days are auto-deleted on every conversation fetch.
-
-Add to your main.py:
-  from app.routers.chat_router import chat_router
-  app.include_router(chat_router, prefix="/api")
-
-Required User model fields:
-  push_token = Column(String(500), nullable=True)  # for offline push delivery
-"""
-
 import json
 import uuid
 from datetime  import datetime, timedelta

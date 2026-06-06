@@ -160,7 +160,7 @@ const handleSignup = async () => {
       password: values.password,
       role: role, // "farmer" or "customer"
     });
-    await login(res.access_token, res.role);
+    await login(res.access_token, res.role, { id: res.user_id });
     
     // Optional: Redirect or show success
     router.replace("/(auth)/login"); 
