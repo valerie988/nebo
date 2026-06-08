@@ -162,6 +162,7 @@ class OrderOut(BaseModel):
 
 class OrderCreate(BaseModel):
     product_id: str
+    product_name: str
     farmer_id: str
     items: str
     total_amount: float
@@ -190,3 +191,19 @@ class ConversationOut(BaseModel):
     updated_at: datetime
     messages: List[MessageOut] = []
     model_config = {"from_attributes": True}
+
+# ── 6. Notification Schemas ───────────────────────────────────────────────────
+
+class NotificationResponse(BaseModel):
+    id:         int
+    title:      str
+    message:    str
+    data:       dict
+    is_read:    bool
+    created_at: datetime  # Fixed: changed from datetime.datetime to datetime
+
+    class Config:
+        from_attributes = True
+
+class UnreadCountResponse(BaseModel):
+    count: int

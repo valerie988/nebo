@@ -11,9 +11,10 @@ from app.routers.auth import router as auth_router
 from app.routers.api import (
     users_router,
     products_router,
+    notification_router,  
 )
 from app.routers.admin import admin_router
-from app.routers import orders
+from app.routers import orders          
 
 Base.metadata.create_all(bind=engine)
 
@@ -24,6 +25,7 @@ app = FastAPI(
     title="NEBO API",
     description="Backend for NEBO — connecting farmers with customers",
     version="1.0.0",
+    redirect_slashes=False
 )
 
 # 3. CORS Middleware configuration so your apps can connect without security blocks
@@ -62,9 +64,9 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 app.include_router(auth_router, prefix="/api")
 app.include_router(users_router, prefix="/api")
 app.include_router(products_router, prefix="/api")
-# FIXED: Using the properly named admin_router variable here
 app.include_router(admin_router, prefix="/api")
 app.include_router(orders.router, prefix="/api/orders", tags=["orders"])
+app.include_router(notification_router, prefix="/api")  
 
 # 6. Health check endpoints
 @app.get("/health", tags=["health"])

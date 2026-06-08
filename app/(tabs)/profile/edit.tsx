@@ -101,68 +101,68 @@ export default function EditProfileScreen() {
   }, [token]);
 
   const handleUpdate = async () => {
-    setSaving(true);
-    let uploadedImageUrl = null;
+  setSaving(true);
+  let uploadedImageUrl = image; // Start with the currently displayed image
 
-    try {
-      // Step 1: Upload Image to Cloudinary if it changed
-      // We check if the image starts with "http" to see if it's already an uploaded URL
-      if (image && !image.startsWith("http")) {
-        const formData = new FormData();
-        formData.append("file", {
-          uri: image,
-          name: "avatar.jpg",
-          type: "image/jpeg",
-        } as any);
-        // Replace with your actual values
-        formData.append("upload_preset", "YOUR_PRESET_NAME");
+  try {
+    // 1. Upload to Cloudinary IF it's a new local file (doesn't start with http)
+    if (image && !image.startsWith("http")) {
+      const formData = new FormData();
+      formData.append("file", {
+        uri: image,
+        name: "avatar.jpg",
+        type: "image/jpeg",
+      } as any);
+      
+      // ✅ REPLACE THESE WITH YOUR ACTUAL CLOUDINARY VALUES
+      formData.append("upload_preset", process.env.EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET || "");
 
-        const cloudinaryRes = await fetch(
-          "https://api.cloudinary.com/v1_1/YOUR_CLOUD_NAME/image/upload",
-          {
-            method: "POST",
-            body: formData,
-          },
-        );
-        const result = await cloudinaryRes.json();
+      const cloudinaryRes = await fetch(
+        `https://api.cloudinary.com/v1_1/${process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`,
+        {
+          method: "POST",
+          body: formData,
+        }
+      );
+
+      const result = await cloudinaryRes.json();
+      
+      if (result.secure_url) {
         uploadedImageUrl = result.secure_url;
       } else {
-        uploadedImageUrl = image; // Keep existing URL
+        throw new Error(result.error?.message || "Cloudinary upload failed");
       }
-
-      // Step 2: Send TEXT data to your backend via JSON
-      const response = await fetch(`${API_URL}/api/auth/update`, {
-        method: "PATCH",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          full_name: form.full_name,
-          phone: form.phone,
-          location: form.location,
-          avatar_url: uploadedImageUrl,
-        }),
-      });
-
-      if (response.ok) {
-        Alert.alert("Success", "Profile updated successfully!");
-        router.back();
-      } else {
-        const errData = await response.json();
-        Alert.alert(
-          "Update Failed",
-          errData.detail || "Could not update profile",
-        );
-      }
-    } catch (err) {
-      console.error("Update Error:", err);
-      Alert.alert("Error", "Check terminal for network error details");
-    } finally {
-      setSaving(false);
     }
-  };
 
+    // 2. Send data to your Backend
+    const response = await fetch(`${API_URL}/api/auth/update`, {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        full_name: form.full_name,
+        phone: form.phone,
+        location: form.location,
+        avatar_url: uploadedImageUrl, // This now contains the new URL or the old one
+      }),
+    });
+
+    if (response.ok) {
+      Alert.alert("Success", "Profile updated successfully!");
+      router.back();
+    } else {
+      const errData = await response.json();
+      Alert.alert("Update Failed", errData.detail || "Could not update profile");
+    }
+  } catch (err) {
+    console.error("Update Error:", err);
+    Alert.alert("Error", "Check terminal for network error details");
+  } finally {
+    setSaving(false);
+  }
+};
   if (loading)
     return (
       <View className="flex-1 items-center justify-center bg-[#F0FAF4]">

@@ -1,6 +1,7 @@
 import { AuthProvider, useAuth } from "@/components/context/AuthContext";
 import { Slot, useRouter, useSegments } from "expo-router";
 import { useEffect } from "react";
+import { NotificationsProvider } from '@/components/context/NotificationsContext';
 import { ActivityIndicator, View } from "react-native";
 import {
   configureReanimatedLogger,
@@ -64,7 +65,9 @@ function RootLayoutNav() {
 export default function RootLayout() {
   return (
     <AuthProvider>
+      <NotificationsProvider>
       <RootLayoutNav />
+      </NotificationsProvider>
     </AuthProvider>
   );
 }

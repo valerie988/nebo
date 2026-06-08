@@ -27,5 +27,8 @@ module.exports = {
     extra: {
       API_URL: "http://172.20.10.3:8000",
     },
+    "eas": {
+        "projectId": "YOUR_EAS_PROJECT_ID"
+      }
   },
 };

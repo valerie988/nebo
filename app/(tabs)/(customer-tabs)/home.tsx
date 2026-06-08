@@ -436,10 +436,13 @@ export default function HomeScreen() {
                 key={farmer.id}
                 className="flex-row items-center bg-white rounded-2xl p-4 mb-3 border border-[#D8F3DC] shadow-sm"
               >
+                {/* Nearby Farmers Image Logic */}
                 <View className="w-12 h-12 rounded-xl bg-[#F0FAF4] items-center justify-center mr-3.5 border border-[#D8F3DC] overflow-hidden">
-                  {farmer.profile_pic ? (
+                  {farmer.profile_pic || farmer.avatar_url ? (
                     <Image
-                      source={{ uri: farmer.profile_pic }}
+                      source={{
+                        uri: farmer.profile_pic || farmer.avatar_url,
+                      }}
                       className="w-full h-full"
                       resizeMode="cover"
                     />

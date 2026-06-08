@@ -1,7 +1,5 @@
 import MessageFarmerButton from "@/components/MessageFarmerButton";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import Constants from "expo-constants";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
@@ -13,10 +11,11 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-
-const API_URL = Constants.expoConfig?.extra?.API_URL;
+// Centralized apiClient instance handling auth tokens automatically
+import apiClient from "@/components/services/authService"; 
 
 export default function ProductDetails() {
+  // Pulling the parameters matching your navigation structure
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
 
@@ -24,8 +23,10 @@ export default function ProductDetails() {
   const [loading, setLoading] = useState(true);
   const [isLiked, setIsLiked] = useState(false);
   const [rating, setRating] = useState(0);
+  const [quantity, setQuantity] = useState(1); // Manages chosen units
+  const [ordering, setOrdering] = useState(false); // Controls network activity state
   const [showOrderModal, setShowOrderModal] = useState(false);
-  const [showErrorModal, setShowErrorModal] = useState(false); // New
+  const [showErrorModal, setShowErrorModal] = useState(false);
 
   useEffect(() => {
     if (showOrderModal) {
@@ -39,8 +40,7 @@ export default function ProductDetails() {
 
     const fetchProduct = async () => {
       try {
-        const response = await fetch(`${API_URL}/api/products/${id}`);
-        const data = await response.json();
+        const { data } = await apiClient.get(`/products/${id}`);
         setProduct(data);
       } catch (err) {
         console.error("Fetch error:", err);
@@ -65,40 +65,34 @@ export default function ProductDetails() {
         <Text>Product not found.</Text>
       </View>
     );
-  // 1. Add these states
+
+  // Dynamic calculated price calculation based on quantity selector state
+  const totalAmount = product.price * quantity;
 
   const handleOrder = async () => {
+    setOrdering(true);
     try {
-      const token = await AsyncStorage.getItem("nebo_token");
-
-      // Construct the payload to match what your backend expects
+      // Robust payload sent to the backend to generate the order 
+      // and trigger the push notification to the farmer automatically.
       const orderPayload = {
         product_id: id,
-        quantity: 1,
-        farmer_id: product.farmer_id, // Added
-        items: product.name, // Added
-        total_amount: product.price, // Added
+        product_name: product.name,
+        farmer_id: product.farmer_id,
+        quantity: quantity,
+        items: product.name,
+        total_amount: totalAmount,
       };
 
-      const response = await fetch(`${API_URL}/api/orders/`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(orderPayload),
-      });
-
-      if (response.ok) {
-        setShowOrderModal(true);
-      } else {
-        setShowErrorModal(true); // Show error modal instead of alert
-      }
+      await apiClient.post("/orders/", orderPayload);
+      setShowOrderModal(true);
     } catch (err) {
-      console.error("Fetch error:", err);
+      console.error("Order error:", err);
       setShowErrorModal(true);
+    } finally {
+      setOrdering(false);
     }
   };
+
   return (
     <View className="flex-1 bg-[#FDFEFE]">
       {/* Floating Header */}
@@ -123,7 +117,7 @@ export default function ProductDetails() {
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 120 }}
+        contentContainerStyle={{ paddingBottom: 160 }}
       >
         <View className="w-full h-[380px] bg-[#F4F7F6]">
           {product?.photos?.[0] ? (
@@ -144,18 +138,16 @@ export default function ProductDetails() {
             {product?.name}
           </Text>
           <Text className="text-2xl font-bold text-[#2D6A4F] mt-2">
-            {product?.price} XAF
+            {product?.price} XAF / {product?.unit || 'unit'}
           </Text>
 
           {/* Farmer and Rating Metadata */}
           <View className="mt-6 flex-row justify-between items-center bg-[#F8FDF9] p-4 rounded-2xl border border-[#D8F3DC]">
             <View>
               <Text className="text-[#1B4332] font-bold text-lg">
-                {product?.farmer_name ||
-                  product?.farmer?.full_name ||
-                  "Unknown Farmer"}
+                🌾 Sold by {product?.farmer_name || product?.farmer?.full_name || "Unknown Farmer"}
               </Text>
-              <Text className="text-[#52B788] text-sm">
+              <Text className="text-[#52B788] text-sm mt-1">
                 📍 {product?.location || "Location not set"}
               </Text>
             </View>
@@ -173,30 +165,39 @@ export default function ProductDetails() {
             </View>
           </View>
 
-          {/* Inventory Stats */}
-          <View className="mt-4 flex-row gap-4">
-            <View className="flex-1 bg-[#F0FAF4] p-4 rounded-2xl border border-[#D8F3DC]">
-              <Text className="text-[#52B788] text-xs font-bold uppercase">
-                Quantity
-              </Text>
-              <Text className="text-[#1B4332] font-bold text-lg">
-                {product?.quantity} {product?.unit}
-              </Text>
+          {/* Quantity Selector Section */}
+          <View className="mt-6 flex-row justify-between items-center bg-[#F0FAF4] p-4 rounded-2xl border border-[#D8F3DC]">
+            <View>
+              <Text className="text-[#1B4332] font-bold text-base">Select Quantity</Text>
+              <Text className="text-[#52B788] text-xs">Stock Available: {product?.quantity || product?.stock || 0}</Text>
             </View>
-            <View className="flex-1 bg-[#F0FAF4] p-4 rounded-2xl border border-[#D8F3DC]">
-              <Text className="text-[#52B788] text-xs font-bold uppercase">
-                Category
+            <View className="flex-row items-center gap-4">
+              <TouchableOpacity
+                className="w-10 h-10 rounded-full bg-white border border-[#2D6A4F] items-center justify-center"
+                onPress={() => setQuantity((q) => Math.max(1, q - 1))}
+              >
+                <Text className="text-[#2D6A4F] font-bold text-xl">-</Text>
+              </TouchableOpacity>
+              <Text className="text-[#1B4332] font-black text-xl min-w-[30px] text-center">
+                {quantity}
               </Text>
-              <Text className="text-[#1B4332] font-bold text-lg">
-                {product?.category}
-              </Text>
+              <TouchableOpacity
+                className="w-10 h-10 rounded-full bg-white border border-[#2D6A4F] items-center justify-center"
+                onPress={() => setQuantity((q) => Math.min(product?.quantity || product?.stock || 99, q + 1))}
+              >
+                <Text className="text-[#2D6A4F] font-bold text-xl">+</Text>
+              </TouchableOpacity>
             </View>
           </View>
 
+          {/* Category Stats */}
+          <View className="mt-4 bg-[#F0FAF4] p-4 rounded-2xl border border-[#D8F3DC]">
+            <Text className="text-[#52B788] text-xs font-bold uppercase">Category</Text>
+            <Text className="text-[#1B4332] font-bold text-lg">{product?.category || "General"}</Text>
+          </View>
+
           <View className="mt-6">
-            <Text className="text-[#1B4332] font-bold text-lg mb-2">
-              Description
-            </Text>
+            <Text className="text-[#1B4332] font-bold text-lg mb-2">Description</Text>
             <Text className="text-[#2D6A4F] leading-7 text-base">
               {product?.description || "No description provided."}
             </Text>
@@ -206,25 +207,34 @@ export default function ProductDetails() {
 
       {/* Footer Actions */}
       <View
-        className="absolute bottom-0 w-full p-6 bg-white border-t border-[#F0FAF4] flex-row gap-4"
-        pointerEvents="box-none"
+        className="absolute bottom-0 w-full p-6 bg-white border-t border-[#F0FAF4]"
         style={{ zIndex: 1000, elevation: 10 }}
       >
-        <TouchableOpacity
-          className="flex-1 bg-[#2D6A4F] h-14 rounded-2xl items-center justify-center"
-          onPress={handleOrder} 
-        >
-          <Text className="text-white font-bold text-base">Order Directly</Text>
-        </TouchableOpacity>
+        {/* Total Price Visualization Display */}
+        <View className="flex-row justify-between items-center mb-4 px-1">
+          <Text className="text-gray-500 font-medium text-base">Total Price:</Text>
+          <Text className="text-[#1B4332] font-black text-2xl">{totalAmount.toFixed(2)} XAF</Text>
+        </View>
 
-        {/* Ensure this component has no transparent overlays */}
-        <MessageFarmerButton
-          farmerId={product?.farmer_id}
-          farmerName={
-            product?.farmer_name || product?.farmer?.full_name || "Farmer"
-          }
-          farmerPhone={product?.farmer?.phone}
-        />
+        <View className="flex-row gap-4">
+          <TouchableOpacity
+            className="flex-1 bg-[#2D6A4F] h-14 rounded-2xl items-center justify-center"
+            onPress={handleOrder} 
+            disabled={ordering}
+          >
+            {ordering ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text className="text-white font-bold text-base">Place Order</Text>
+            )}
+          </TouchableOpacity>
+
+          <MessageFarmerButton
+            farmerId={product?.farmer_id}
+            farmerName={product?.farmer_name || product?.farmer?.full_name || "Farmer"}
+            farmerPhone={product?.farmer?.phone}
+          />
+        </View>
       </View>
 
       {/* Success Modal */}
@@ -232,8 +242,9 @@ export default function ProductDetails() {
         <View className="flex-1 justify-center items-center bg-black/40 px-6">
           <View className="bg-white p-8 rounded-[32px] items-center w-full">
             <Ionicons name="checkmark-circle" size={60} color="#52B788" />
-            <Text className="text-2xl font-black text-[#1B4332] mt-4">
-              Order Placed!
+            <Text className="text-2xl font-black text-[#1B4332] mt-4">Order Placed! 🎉</Text>
+            <Text className="text-[#2D6A4F] text-center mt-2">
+              The farmer has been notified about your order for {product?.name}.
             </Text>
           </View>
         </View>
@@ -247,9 +258,7 @@ export default function ProductDetails() {
         >
           <View className="bg-white p-8 rounded-[32px] items-center w-full">
             <Ionicons name="alert-circle" size={60} color="#EF4444" />
-            <Text className="text-2xl font-black text-[#1B4332] mt-4">
-              Oops!
-            </Text>
+            <Text className="text-2xl font-black text-[#1B4332] mt-4">Oops!</Text>
             <Text className="text-[#2D6A4F] text-center mt-2">
               Something went wrong. Please try again.
             </Text>
