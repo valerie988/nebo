@@ -11,9 +11,7 @@ DATABASE_URL = os.getenv(
 engine = create_engine(
     DATABASE_URL,
     connect_args={
-        "ssl": {
-            "ssl_ca": None
-        }
+        "ssl": True
     },
     pool_pre_ping=True,
     pool_recycle=280
