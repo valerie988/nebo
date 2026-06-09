@@ -16,7 +16,9 @@ from app.routers.notifications import router as notification_router
 from app.routers.admin import admin_router
 from app.routers import orders          
 
-Base.metadata.create_all(bind=engine)
+@app.on_event("startup")
+def startup():
+    Base.metadata.create_all(bind=engine)
 
 # 2. Create local upload directory for product imagery
 os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
