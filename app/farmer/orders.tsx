@@ -96,6 +96,45 @@ export default function FarmerOrdersScreen() {
       </SafeAreaView>
     );
   }
+  const deleteOrder = async (
+  orderId: string,
+  productName: string
+) => {
+  Alert.alert(
+    "Delete Order",
+    `Delete "${productName}" permanently?`,
+    [
+      {
+        text: "Cancel",
+        style: "cancel",
+      },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await apiClient.delete(`/orders/${orderId}`);
+
+            setOrders((prev) =>
+              prev.filter((o) => o.id !== orderId)
+            );
+
+            Alert.alert(
+              "Success",
+              "Order deleted successfully."
+            );
+          } catch (err: any) {
+            Alert.alert(
+              "Error",
+              err?.response?.data?.detail ||
+                "Could not delete order."
+            );
+          }
+        },
+      },
+    ]
+  );
+};
 
   return (
     <SafeAreaView className="flex-1 bg-[#F0FAF4]">
@@ -228,6 +267,7 @@ export default function FarmerOrdersScreen() {
                         </TouchableOpacity>
                       );
                     })}
+                    
                   </View>
                 </View>
               )}

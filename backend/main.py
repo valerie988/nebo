@@ -10,9 +10,9 @@ from app.core.config import settings
 from app.routers.auth import router as auth_router
 from app.routers.api import (
     users_router,
-    products_router,
-    notification_router,  
+    products_router, 
 )
+from app.routers.notifications import router as notification_router
 from app.routers.admin import admin_router
 from app.routers import orders          
 

@@ -10,9 +10,6 @@ from app.core.security import get_current_user
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 
-# -----------------------------------------
-# PYDANTIC RESPONSE SCHEMAS
-# -----------------------------------------
 class NotificationOut(BaseModel):
     id: int  
     user_id: str
@@ -27,10 +24,6 @@ class NotificationOut(BaseModel):
 class UnreadCountResponse(BaseModel):
     count: int
 
-
-# -----------------------------------------
-# ENDPOINTS
-# -----------------------------------------
 
 @router.get("", response_model=List[NotificationOut])
 def get_notifications(

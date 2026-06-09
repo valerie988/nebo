@@ -21,9 +21,12 @@ router = APIRouter()
 @router.get("", response_model=List[OrderOut])
 async def get_orders(db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     return db.query(Order).options(
-        joinedload(Order.farmer),
-        joinedload(Order.order_items).joinedload(OrderItem.product)
-    ).filter(Order.customer_id == current_user.id).all()
+    joinedload(Order.farmer),
+    joinedload(Order.order_items).joinedload(OrderItem.product)
+).filter(
+    Order.customer_id == current_user.id,
+    Order.status != "cancelled"
+).all()
 
 
 # -------------------------
