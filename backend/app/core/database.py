@@ -1,15 +1,20 @@
 import os
 from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.declarative import declarative_base
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "mysql+pymysql://avnadmin:PASSWORD@nebo-db-neboproject.e.aivencloud.com:21648/defaultdb?ssl_mode=REQUIRED"
+    "mysql+pymysql://avnadmin:PASSWORD@nebo-db-neboproject.e.aivencloud.com:21648/defaultdb"
 )
 
 engine = create_engine(
     DATABASE_URL,
+    connect_args={
+        "ssl": {
+            "ssl_ca": None
+        }
+    },
     pool_pre_ping=True,
     pool_recycle=280
 )
