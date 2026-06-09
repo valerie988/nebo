@@ -149,7 +149,7 @@ def refresh_token(body: RefreshRequest, db: Session = Depends(get_db)):
         user_id=user.id,
     )
 
-# ─── Logout ───────────────────────────────────────────────────────────────────
+# ─── Logout 
 @router.post("/logout")
 def logout(
     body: RefreshRequest,
@@ -166,18 +166,14 @@ def logout(
 
 @router.get("/me", response_model=UserOutWithStats)
 async def get_me(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    # 1. Calculate stats
     order_count = db.query(Order).filter(Order.customer_id == current_user.id).count()
     product_count = db.query(Product).filter(Product.farmer_id == current_user.id).count()
 
-    # 2. Convert current_user to a dictionary
     user_dict = UserOut.model_validate(current_user, from_attributes=True).model_dump()
-    
-    # 3. Add the stats to the dictionary
+
     user_dict["total_products"] = product_count
     user_dict["total_orders"] = order_count
-    
-    # 4. Return as the full schema
+
     return user_dict
 
 @router.patch("/update", response_model=UserOut)
@@ -192,7 +188,6 @@ async def update_profile(
     if not update_data:
         raise HTTPException(status_code=400, detail="No data provided to update")
 
-    # Apply updates to the user object
     for key, value in update_data.items():
         setattr(current_user, key, value)
 
