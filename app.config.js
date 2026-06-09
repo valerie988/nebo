@@ -12,10 +12,14 @@ module.exports = {
       resizeMode: "contain",
       backgroundColor: "#F0FAF4",
     },
+    // Added bundleIdentifier here:
     ios: {
       supportsTablet: true,
+      bundleIdentifier: "com.nehvalerie.nebo",
     },
+    // Added package here:
     android: {
+      package: "com.nehvalerie.nebo",
       adaptiveIcon: {
         foregroundImage: "./assets/images/logo.png",
         backgroundColor: "#F0FAF4",
@@ -24,7 +28,6 @@ module.exports = {
     web: {
       favicon: "./assets/favicon.png",
     },
-    // Move 'eas' inside 'extra' like this:
     extra: {
       API_URL: "http://172.20.10.3:8000",
       eas: {
