@@ -1,15 +1,22 @@
-# app/core/database.py
+import os
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
-SQLALCHEMY_DATABASE_URL = "mysql+pymysql://root:@localhost/nebo"  
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "mysql+pymysql://avnadmin:PASSWORD@nebo-db-neboproject.e.aivencloud.com:21648/defaultdb?ssl_mode=REQUIRED"
+)
 
-engine = create_engine(SQLALCHEMY_DATABASE_URL)
+engine = create_engine(
+    DATABASE_URL,
+    pool_pre_ping=True,
+    pool_recycle=280
+)
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
-# Dependency
 def get_db():
     db = SessionLocal()
     try:
