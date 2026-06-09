@@ -1,12 +1,14 @@
 import os
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker, declarative_base
 
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "mysql+pymysql://avnadmin:PASSWORD@nebo-db-neboproject.e.aivencloud.com:21648/defaultdb"
-)
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+# 🚨 Fail fast if missing (important for Render)
+if not DATABASE_URL:
+    raise ValueError("DATABASE_URL is not set in environment variables")
+
+DATABASE_URL = DATABASE_URL.strip()
 
 engine = create_engine(
     DATABASE_URL,
@@ -14,8 +16,14 @@ engine = create_engine(
     pool_recycle=280
 )
 
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+SessionLocal = sessionmaker(
+    autocommit=False,
+    autoflush=False,
+    bind=engine
+)
+
 Base = declarative_base()
+
 
 def get_db():
     db = SessionLocal()
