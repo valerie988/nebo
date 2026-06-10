@@ -13,7 +13,7 @@ from app.routers.api import users_router, products_router
 from app.routers.notifications import router as notification_router
 from app.routers.admin import admin_router
 from app.routers.orders import router as orders_router
-
+from app.routers.chat import chat_router
 
 # =========================
 # 1. CREATE APP FIRST
@@ -95,7 +95,7 @@ app.include_router(products_router, prefix="/api")
 app.include_router(admin_router, prefix="/api")
 app.include_router(orders_router, prefix="/api/orders", tags=["orders"])
 app.include_router(notification_router, prefix="/api")
-
+app.include_router(chat_router, prefix="/api")
 
 # =========================
 # 8. HEALTH CHECK

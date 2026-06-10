@@ -1,8 +1,8 @@
 import Constants from "expo-constants";
 import { chatService, Message } from "./chatService";
 
-const RAW_URL   = Constants.expoConfig?.extra?.API_URL || "http://localhost:8000";
-const WS_BASE   = RAW_URL.replace(/^http/, "ws");
+const RAW_URL = Constants.expoConfig?.extra?.API_URL || "http://localhost:8000";
+const WS_BASE = RAW_URL.replace(/^http/, "ws");
 
 type MsgListener    = (msg: Message) => void;
 type StatusListener = (online: boolean) => void;
@@ -18,11 +18,9 @@ class ChatSocket {
   private msgListeners:    Set<MsgListener>    = new Set();
   private statusListeners: Set<StatusListener> = new Set();
 
-  // ── Public API ──────────────────────────────────────────────────────────────
-
   connect(token: string, userId: string): void {
-    this.token    = token;
-    this.userId   = userId;
+    this.token     = token;
+    this.userId    = userId;
     this.destroyed = false;
     this._open();
   }
@@ -35,7 +33,6 @@ class ChatSocket {
     this._notifyStatus(false);
   }
 
-  /** Send a message. Returns true if sent via WS, false if offline. */
   send(params: {
     localId:        string;
     receiverId:     string;
@@ -67,8 +64,6 @@ class ChatSocket {
     return () => this.statusListeners.delete(fn);
   }
 
-  // ── Internal ────────────────────────────────────────────────────────────────
-
   private _open(): void {
     if (this.destroyed) return;
     if (
@@ -90,40 +85,57 @@ class ChatSocket {
         try {
           const data = JSON.parse(event.data);
 
+          // ── Delivery confirmation for our own sent message ─────────────────
           if (data.type === "delivered" && data.local_id) {
             await chatService.confirmMessage(
-              data.local_id, data.message_id, data.conversation_id
+              this.userId, data.local_id, data.message_id, data.conversation_id
             );
             return;
           }
 
+          // ── Incoming message from the other person ────────────────────────
           if (data.type === "message") {
+            const isMyEcho = data.sender_id === this.userId;
+
+            if (isMyEcho && data.local_id) {
+              // Echo of our own message — just confirm, don't re-add
+              await chatService.confirmMessage(
+                this.userId, data.local_id, data.id, data.conversation_id
+              );
+              return;
+            }
+
+            // ── KEY FIX: ensure conversation exists in THIS user's storage ──
+            // with the sender (other person) as the participant.
+            // This is what makes the farmer see the CUSTOMER's name.
+            const senderRole = data.sender_role || "customer"; // backend sends this
+            await chatService.getOrCreateConversation(this.userId, {
+              participantId:    data.sender_id,
+              participantName:  data.sender_name,   // ← customer's name for farmer
+              participantRole:  senderRole,
+              serverConvoId:    data.conversation_id,
+            });
+
             const msg: Message = {
               id:             data.id,
               conversationId: data.conversation_id,
               senderId:       data.sender_id,
               senderName:     data.sender_name || "",
               receiverId:     data.receiver_id,
+              receiverName:   data.receiver_name || "",
               text:           data.text,
               createdAt:      data.created_at,
-              read:           data.sender_id === this.userId,
+              read:           false,
               pending:        false,
               synced:         true,
             };
 
-            if (data.sender_id === this.userId && data.local_id) {
-              // Echo of our own message — confirm it
-              await chatService.confirmMessage(
-                data.local_id, data.id, data.conversation_id
-              );
-            } else {
-              // Incoming from other person
-              await chatService.receiveMessage(msg);
-            }
-
+            await chatService.receiveMessage(this.userId, msg);
             this._notifyMsg(msg);
           }
-        } catch { /* ignore malformed */ }
+        } catch (e) {
+          console.warn("chatSocket parse error:", e);
+        }
       };
 
       this.ws.onerror  = () => {};
@@ -136,9 +148,8 @@ class ChatSocket {
     }
   }
 
-  /** Flush messages that were composed while offline */
   private async _flushPending(): Promise<void> {
-    const pending = await chatService.getPendingMessages();
+    const pending = await chatService.getPendingMessages(this.userId);
     for (const msg of pending) {
       if (this.ws?.readyState !== WebSocket.OPEN) break;
       this.ws.send(JSON.stringify({

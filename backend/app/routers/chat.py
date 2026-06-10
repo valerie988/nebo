@@ -1,16 +1,23 @@
+"""
+app/routers/chat.py
+Replace your existing chat.py with this file.
+"""
+
 import json
 import uuid
-from datetime  import datetime, timedelta
+from datetime  import datetime, timezone, timedelta
 from typing    import Dict, List, Optional
 
 from fastapi   import APIRouter, WebSocket, WebSocketDisconnect, Depends, HTTPException
 from pydantic  import BaseModel
 from sqlalchemy.orm import Session
 
-from app.core.database import get_db
-from app.core.security import get_current_user
-from app.core.config   import settings
-from app.models.models import User, Message, Conversation
+# ── Match YOUR import style exactly ──────────────────────────────────────────
+from app.core.database  import get_db          # adjust if different
+from app.core.security  import get_current_user # adjust if different
+from app.core.config    import settings         # adjust if different
+from app.models.user    import User             # adjust to your user model path
+from app.models.chat    import Conversation, Message   # ← new models file
 
 chat_router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -29,8 +36,8 @@ class ConnectionManager:
 
     def disconnect(self, user_id: str, ws: WebSocket):
         conns = self.active.get(user_id, [])
-        try: conns.remove(ws)
-        except ValueError: pass
+        try:    conns.remove(ws)
+        except: pass
         if not conns:
             self.active.pop(user_id, None)
 
@@ -39,36 +46,36 @@ class ConnectionManager:
 
     async def send_to(self, user_id: str, data: dict) -> bool:
         delivered = False
-        dead      = []
+        dead = []
         for ws in self.active.get(user_id, []):
             try:
                 await ws.send_json(data)
                 delivered = True
-            except Exception:
+            except:
                 dead.append(ws)
         for ws in dead:
             try: self.active.get(user_id, []).remove(ws)
-            except ValueError: pass
+            except: pass
         return delivered
 
 
 manager = ConnectionManager()
 
 
-# ── Helper: get or create conversation ───────────────────────────────────────
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def utcnow():
+    return datetime.now(timezone.utc)
 
 def _get_or_create_convo(
-    db:          Session,
-    user_id:     str,
-    receiver_id: str,
-    convo_id:    Optional[str],
+    db: Session, user_id: str, receiver_id: str, convo_id: Optional[str]
 ) -> Conversation:
     if convo_id:
         c = db.query(Conversation).filter(Conversation.id == convo_id).first()
         if c: return c
 
     c = db.query(Conversation).filter(
-        ((Conversation.participant_one == user_id)    & (Conversation.participant_two == receiver_id)) |
+        ((Conversation.participant_one == user_id)     & (Conversation.participant_two == receiver_id)) |
         ((Conversation.participant_one == receiver_id) & (Conversation.participant_two == user_id))
     ).first()
 
@@ -81,42 +88,19 @@ def _get_or_create_convo(
         db.add(c)
         db.commit()
         db.refresh(c)
-
     return c
 
-
-# ── Helper: auto-delete messages older than 3 days ───────────────────────────
-
 def _purge_old_messages(db: Session):
-    cutoff = datetime.utcnow() - THREE_DAYS
-    db.query(Message).filter(Message.created_at < cutoff).delete()
+    cutoff = utcnow() - THREE_DAYS
+    db.query(Message).filter(Message.created_at < cutoff).delete(synchronize_session=False)
     db.commit()
 
 
-# ── WebSocket endpoint ────────────────────────────────────────────────────────
+# ── WebSocket ─────────────────────────────────────────────────────────────────
 
 @chat_router.websocket("/ws/{token}")
-async def websocket_endpoint(
-    ws:    WebSocket,
-    token: str,
-    db:    Session = Depends(get_db),
-):
-    """
-    Connect:   ws(s)://your-api/api/chat/ws/<access_token>
-
-    Client sends:
-      { "type":"message", "receiver_id":"uuid", "text":"...",
-        "conversation_id":"uuid|null", "local_id":"client-uuid" }
-
-    Server sends to sender:
-      { "type":"delivered", "local_id":"...", "message_id":"...", "conversation_id":"..." }
-
-    Server sends to receiver:
-      { "type":"message", "id":"...", "conversation_id":"...", "sender_id":"...",
-        "sender_name":"...", "receiver_id":"...", "text":"...", "created_at":"..." }
-    """
+async def websocket_endpoint(ws: WebSocket, token: str, db: Session = Depends(get_db)):
     from jose import jwt, JWTError
-
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         user_id = payload.get("sub")
@@ -127,27 +111,23 @@ async def websocket_endpoint(
         await ws.close(code=4001); return
 
     await manager.connect(user_id, ws)
-    await _broadcast_status(user_id, True, db)
 
     try:
         while True:
             raw  = await ws.receive_text()
             data = json.loads(raw)
-
-            if data.get("type") != "message":
-                continue
+            if data.get("type") != "message": continue
 
             receiver_id = (data.get("receiver_id") or "").strip()
             text        = (data.get("text")        or "").strip()
             local_id    = data.get("local_id", "")
             convo_id    = data.get("conversation_id")
 
-            if not text or not receiver_id:
-                continue
+            if not text or not receiver_id: continue
 
             receiver = db.query(User).filter(User.id == receiver_id).first()
             if not receiver:
-                await ws.send_json({"type":"error","detail":"Receiver not found"})
+                await ws.send_json({"type": "error", "detail": "Receiver not found"})
                 continue
 
             convo = _get_or_create_convo(db, user_id, receiver_id, convo_id)
@@ -161,11 +141,11 @@ async def websocket_endpoint(
                 read            = False,
             )
             db.add(msg)
-            convo.updated_at = datetime.utcnow()
+            convo.updated_at = utcnow()
             db.commit()
             db.refresh(msg)
 
-            # Confirm to sender with real server ID
+            # Confirm to sender
             await ws.send_json({
                 "type":            "delivered",
                 "local_id":        local_id,
@@ -173,21 +153,23 @@ async def websocket_endpoint(
                 "conversation_id": convo.id,
             })
 
-            # Deliver to receiver if online
+            # Deliver to receiver
             delivered = await manager.send_to(receiver_id, {
                 "type":            "message",
                 "id":              msg.id,
                 "conversation_id": convo.id,
                 "sender_id":       user_id,
                 "sender_name":     user.full_name,
+                "sender_role":     user.role,
                 "receiver_id":     receiver_id,
+                "receiver_name":   receiver.full_name,
                 "text":            text,
                 "created_at":      msg.created_at.isoformat(),
                 "read":            False,
             })
 
-            # Push notification if receiver is offline
-            if not delivered and receiver.push_token:
+            # Push notification if offline
+            if not delivered and hasattr(receiver, "push_token") and receiver.push_token:
                 try:
                     from app.services.notification_service import send_push
                     import asyncio
@@ -202,128 +184,19 @@ async def websocket_endpoint(
                             "sender_name":     user.full_name,
                         },
                     ))
-                except Exception:
-                    pass
+                except: pass
 
     except WebSocketDisconnect:
         manager.disconnect(user_id, ws)
-        await _broadcast_status(user_id, False, db)
 
 
-async def _broadcast_status(user_id: str, online: bool, db: Session):
-    convos = db.query(Conversation).filter(
-        (Conversation.participant_one == user_id) |
-        (Conversation.participant_two == user_id)
-    ).all()
-    for c in convos:
-        contact = c.participant_two if c.participant_one == user_id else c.participant_one
-        await manager.send_to(contact, {"type":"online_status","user_id":user_id,"online":online})
+# ── REST: conversations list ──────────────────────────────────────────────────
 
-
-# ── Sync offline messages ─────────────────────────────────────────────────────
-
-class SyncItem(BaseModel):
-    id:              str
-    receiver_id:     str
-    text:            str
-    conversation_id: Optional[str] = None
-    created_at:      Optional[str] = None
-
-
-class SyncRequest(BaseModel):
-    messages: List[SyncItem]
-
-
-@chat_router.post("/sync")
-async def sync_offline(
-    body:         SyncRequest,
-    db:           Session = Depends(get_db),
-    current_user: User    = Depends(get_current_user),
-):
-    """Mobile calls this on reconnect to flush messages composed offline."""
-    synced = []
-
-    for item in body.messages:
-        text        = (item.text or "").strip()
-        receiver_id = (item.receiver_id or "").strip()
-        if not text or not receiver_id:
-            continue
-
-        # Idempotency — if this local ID was already synced, skip
-        existing = db.query(Message).filter(Message.id == item.id).first()
-        if existing:
-            synced.append({"local_id": item.id, "server_id": existing.id})
-            continue
-
-        convo = _get_or_create_convo(db, current_user.id, receiver_id, item.conversation_id)
-
-        try:
-            ts = datetime.fromisoformat(item.created_at) if item.created_at else datetime.utcnow()
-        except (ValueError, TypeError):
-            ts = datetime.utcnow()
-
-        msg = Message(
-            id              = str(uuid.uuid4()),
-            conversation_id = convo.id,
-            sender_id       = current_user.id,
-            receiver_id     = receiver_id,
-            text            = text,
-            read            = False,
-            created_at      = ts,
-        )
-        db.add(msg)
-        convo.updated_at = datetime.utcnow()
-        db.commit()
-        db.refresh(msg)
-
-        # Deliver via WS if receiver is online
-        await manager.send_to(receiver_id, {
-            "type":            "message",
-            "id":              msg.id,
-            "conversation_id": convo.id,
-            "sender_id":       current_user.id,
-            "sender_name":     current_user.full_name,
-            "receiver_id":     receiver_id,
-            "text":            text,
-            "created_at":      msg.created_at.isoformat(),
-            "read":            False,
-        })
-
-        synced.append({"local_id": item.id, "server_id": msg.id})
-
-    return {"synced": synced}
-
-
-# ── REST endpoints ────────────────────────────────────────────────────────────
-
-class ConvoSchema(BaseModel):
-    id:                   str
-    participant_one:      str
-    participant_two:      str
-    updated_at:           datetime
-    other_name:           Optional[str] = None
-    last_message:         Optional[str] = None
-    unread_count:         int           = 0
-    model_config = {"from_attributes": True}
-
-
-class MessageSchema(BaseModel):
-    id:              str
-    conversation_id: str
-    sender_id:       str
-    receiver_id:     str
-    text:            str
-    read:            bool
-    created_at:      datetime
-    model_config = {"from_attributes": True}
-
-
-@chat_router.get("/conversations", response_model=List[ConvoSchema])
+@chat_router.get("/conversations")
 def get_conversations(
     db:           Session = Depends(get_db),
     current_user: User    = Depends(get_current_user),
 ):
-    # Purge old messages on every fetch
     _purge_old_messages(db)
 
     convos = (
@@ -338,9 +211,11 @@ def get_conversations(
 
     result = []
     for c in convos:
+        # other_id is whoever is NOT the current user
         other_id   = c.participant_two if c.participant_one == current_user.id else c.participant_one
         other_user = db.query(User).filter(User.id == other_id).first()
-        last_msg   = (
+
+        last_msg = (
             db.query(Message)
             .filter(Message.conversation_id == c.id)
             .order_by(Message.created_at.desc())
@@ -356,16 +231,20 @@ def get_conversations(
             "id":              c.id,
             "participant_one": c.participant_one,
             "participant_two": c.participant_two,
-            "updated_at":      c.updated_at,
-            "other_name":      other_user.full_name if other_user else "Unknown",
-            "last_message":    last_msg.text if last_msg else "",
+            "updated_at":      c.updated_at.isoformat() if c.updated_at else None,
+            "other_id":        other_id,                                    # ← mobile uses this
+            "other_name":      other_user.full_name if other_user else "Unknown",  # ← mobile uses this
+            "other_role":      other_user.role      if other_user else "customer", # ← mobile uses this
+            "last_message":    last_msg.text         if last_msg   else "",
             "unread_count":    unread,
         })
 
     return result
 
 
-@chat_router.post("/conversations", response_model=ConvoSchema)
+# ── REST: create conversation ─────────────────────────────────────────────────
+
+@chat_router.post("/conversations")
 def create_conversation(
     body:         dict,
     db:           Session = Depends(get_db),
@@ -384,14 +263,18 @@ def create_conversation(
         "id":              c.id,
         "participant_one": c.participant_one,
         "participant_two": c.participant_two,
-        "updated_at":      c.updated_at,
+        "updated_at":      c.updated_at.isoformat() if c.updated_at else None,
+        "other_id":        rid,
         "other_name":      other_user.full_name if other_user else None,
+        "other_role":      other_user.role      if other_user else "customer",
         "last_message":    "",
         "unread_count":    0,
     }
 
 
-@chat_router.get("/conversations/{conversation_id}/messages", response_model=List[MessageSchema])
+# ── REST: messages for a conversation ────────────────────────────────────────
+
+@chat_router.get("/conversations/{conversation_id}/messages")
 def get_messages(
     conversation_id: str,
     after:           Optional[str] = None,
@@ -416,11 +299,23 @@ def get_messages(
     if after:
         try:
             q = q.filter(Message.created_at > datetime.fromisoformat(after))
-        except ValueError:
-            pass
+        except: pass
 
-    return q.order_by(Message.created_at.asc()).all()
+    msgs = q.order_by(Message.created_at.asc()).all()
 
+    return [{
+        "id":              m.id,
+        "conversation_id": m.conversation_id,
+        "sender_id":       m.sender_id,
+        "sender_name":     m.sender.full_name if m.sender else "",
+        "receiver_id":     m.receiver_id,
+        "text":            m.text,
+        "read":            m.read,
+        "created_at":      m.created_at.isoformat(),
+    } for m in msgs]
+
+
+# ── REST: mark as read ────────────────────────────────────────────────────────
 
 @chat_router.post("/conversations/{conversation_id}/read", status_code=204)
 def mark_read(
@@ -434,3 +329,70 @@ def mark_read(
         Message.read            == False,
     ).update({"read": True})
     db.commit()
+
+
+# ── REST: offline sync ────────────────────────────────────────────────────────
+
+class SyncItem(BaseModel):
+    id:              str
+    receiver_id:     str
+    text:            str
+    conversation_id: Optional[str] = None
+    created_at:      Optional[str] = None
+
+class SyncRequest(BaseModel):
+    messages: List[SyncItem]
+
+@chat_router.post("/sync")
+async def sync_offline(
+    body:         SyncRequest,
+    db:           Session = Depends(get_db),
+    current_user: User    = Depends(get_current_user),
+):
+    synced = []
+    for item in body.messages:
+        text        = (item.text        or "").strip()
+        receiver_id = (item.receiver_id or "").strip()
+        if not text or not receiver_id: continue
+
+        existing = db.query(Message).filter(Message.id == item.id).first()
+        if existing:
+            synced.append({"local_id": item.id, "server_id": existing.id})
+            continue
+
+        convo = _get_or_create_convo(db, current_user.id, receiver_id, item.conversation_id)
+
+        try:    ts = datetime.fromisoformat(item.created_at) if item.created_at else utcnow()
+        except: ts = utcnow()
+
+        msg = Message(
+            id              = str(uuid.uuid4()),
+            conversation_id = convo.id,
+            sender_id       = current_user.id,
+            receiver_id     = receiver_id,
+            text            = text,
+            read            = False,
+            created_at      = ts,
+        )
+        db.add(msg)
+        convo.updated_at = utcnow()
+        db.commit()
+        db.refresh(msg)
+
+        recv = db.query(User).filter(User.id == receiver_id).first()
+        await manager.send_to(receiver_id, {
+            "type":            "message",
+            "id":              msg.id,
+            "conversation_id": convo.id,
+            "sender_id":       current_user.id,
+            "sender_name":     current_user.full_name,
+            "sender_role":     current_user.role,
+            "receiver_id":     receiver_id,
+            "receiver_name":   recv.full_name if recv else "",
+            "text":            text,
+            "created_at":      msg.created_at.isoformat(),
+            "read":            False,
+        })
+        synced.append({"local_id": item.id, "server_id": msg.id})
+
+    return {"synced": synced}

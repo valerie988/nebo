@@ -29,7 +29,7 @@ module.exports = {
       favicon: "./assets/favicon.png",
     },
     extra: {
-      API_URL: "http://172.20.10.3:8000",
+      API_URL: "http://192.168.2.105:8000",
       eas: {
         projectId: "7282f621-51a5-444f-bca6-955b4499d7a8",
       },
