@@ -207,3 +207,8 @@ class NotificationResponse(BaseModel):
 
 class UnreadCountResponse(BaseModel):
     count: int
+
+
+class ViewBody(BaseModel):
+    product_id: str
+    dwell_seconds: Optional[int] = 0
