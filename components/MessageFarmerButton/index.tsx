@@ -57,7 +57,7 @@ export default function MessageFarmerButton({ farmerId, farmerName, farmerPhone 
       onPress={handlePress}
       disabled={loading}
       style={{
-        flex: 1, height: 64, borderRadius: 20,
+        flex: 1, height: 50, borderRadius: 20,
         flexDirection: "row", alignItems: "center", justifyContent: "center",
         backgroundColor: "#F0FAF4", borderWidth: 1.5, borderColor: "#D8F3DC", gap: 8,
       }}

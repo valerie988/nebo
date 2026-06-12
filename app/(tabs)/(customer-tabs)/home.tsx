@@ -1,9 +1,10 @@
 import { useAuth } from "@/components/context/AuthContext";
 import MessageFarmerButton from "@/components/MessageFarmerButton";
 import { Feather, Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 import { useRouter } from "expo-router";
-import React, { JSX, useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Dimensions,
@@ -22,13 +23,12 @@ import { Circle, Path, Svg } from "react-native-svg";
 const API_URL = Constants.expoConfig?.extra?.API_URL;
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
-// Responsive layout math to calculate precise slide sizing
 const SLIDE_WIDTH = SCREEN_WIDTH - 40;
 const GAP = 16;
 const ITEM_LENGTH = SLIDE_WIDTH + GAP;
 
 const CATEGORIES = [
-  { id: "1", label: "All", emoji: "⭐" },
+  { id: "1", label: "All", emoji: "" },
   { id: "2", label: "Veggies", emoji: "🥕" },
   { id: "3", label: "Fruits", emoji: "🍎" },
   { id: "4", label: "Grains", emoji: "🌾" },
@@ -36,8 +36,7 @@ const CATEGORIES = [
   { id: "6", label: "Roots", emoji: "🌽" },
 ];
 
-// Raw Core Carousel Data (Cleaned and absolute CDN imagery)
-const REAL_CAROUSEL_ITEMS = [
+const CAROUSEL = [
   {
     id: "c1",
     title: "Fresh harvest\njust arrived",
@@ -61,14 +60,13 @@ const REAL_CAROUSEL_ITEMS = [
   },
 ];
 
-// 🌟 INFINITE LOOP TRICK DATA ARRAY CREATION
-const SEAMLESS_CAROUSEL_DATA = [
-  { ...REAL_CAROUSEL_ITEMS[REAL_CAROUSEL_ITEMS.length - 1], id: "clone-last" },
-  ...REAL_CAROUSEL_ITEMS,
-  { ...REAL_CAROUSEL_ITEMS[0], id: "clone-first" },
+const SEAMLESS = [
+  { ...CAROUSEL[CAROUSEL.length - 1], id: "clone-last" },
+  ...CAROUSEL,
+  { ...CAROUSEL[0], id: "clone-first" },
 ];
 
-const getProductEmoji = (category: string) => {
+function getEmoji(category: string) {
   switch (category?.toLowerCase()) {
     case "veggies":
       return "🥕";
@@ -83,7 +81,34 @@ const getProductEmoji = (category: string) => {
     default:
       return "📦";
   }
-};
+}
+
+function MatchBadge({ label }: { label?: string }) {
+  if (!label) return null;
+  const colors: Record<string, { bg: string; text: string }> = {
+    Nearby: { bg: "#D8F3DC", text: "#1B4332" },
+    "Your Region": { bg: "#FEF3C7", text: "#92400E" },
+    Recommended: { bg: "#EDE9FE", text: "#5B21B6" },
+  };
+  const c = colors[label] || colors["Recommended"];
+  return (
+    <View
+      style={{
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: 99,
+        backgroundColor: c.bg,
+        alignSelf: "flex-start",
+        marginBottom: 4,
+      }}
+    >
+      <Text style={{ color: c.text, fontSize: 9, fontWeight: "700" }}>
+        {label === "Nearby" ? "" : label === "Your Region" ? "" : ""}
+        {label}
+      </Text>
+    </View>
+  );
+}
 
 function SearchBar({
   value,
@@ -114,63 +139,97 @@ function SearchBar({
   );
 }
 
+function ProductCard({ item, router }: { item: any; router: any }) {
+  const img = item?.image || item?.photos?.[0];
+  return (
+    <TouchableOpacity
+      onPress={() => router.push(`/product/${item.id}`)}
+      activeOpacity={0.85}
+      className="w-40 rounded-[28px] p-2 mr-3.5 border border-[#D8F3DC] bg-white shadow-sm"
+    >
+      <View className="h-[110px] rounded-2xl items-center justify-center mb-2.5 bg-[#F0FAF4] overflow-hidden border border-[#E2F5E9]">
+        {img ? (
+          <Image
+            source={{ uri: img }}
+            className="w-full h-full"
+            resizeMode="cover"
+          />
+        ) : (
+          <Text className="text-4xl">{getEmoji(item.category)}</Text>
+        )}
+      </View>
+      <View className="px-1.5 pb-1">
+        <MatchBadge label={item.match_label} />
+        <Text
+          className="text-[#1B4332] font-extrabold text-[13px]"
+          numberOfLines={1}
+        >
+          {item.name}
+        </Text>
+        <Text
+          className="text-[#52B788] text-[11px] font-semibold mt-0.5"
+          numberOfLines={1}
+        >
+          {item.farmer?.full_name || "Verified Merchant"}
+        </Text>
+        <View className="flex-row items-center justify-between mt-2 pt-1 border-t border-[#F0FAF4]">
+          <Text className="text-[#2D6A4F] font-black text-[13px]">
+            {item.price} XAF
+          </Text>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
 export default function HomeScreen() {
-  const { role } = useAuth();
+  const { role, user } = useAuth();
   const router = useRouter();
+
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState("1");
   const [products, setProducts] = useState<any[]>([]);
   const [farmers, setFarmers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [locationLabel, setLocationLabel] = useState("");
 
-  // Initialize index tracking to 1 instead of 0 to skip past the cloned tail
   const [currentRealIndex, setCurrentRealIndex] = useState(0);
   const internalIndexRef = useRef(1);
   const flatListRef = useRef<FlatList>(null);
-  const autoPlayTimerRef = useRef<JSX.Element | any>(null);
+  const autoPlayTimerRef = useRef<any>(null);
 
   const startAutoPlay = () => {
     stopAutoPlay();
     autoPlayTimerRef.current = setInterval(() => {
-      const nextIndex = internalIndexRef.current + 1;
+      const next = internalIndexRef.current + 1;
       flatListRef.current?.scrollToOffset({
-        offset: nextIndex * ITEM_LENGTH,
+        offset: next * ITEM_LENGTH,
         animated: true,
       });
-      internalIndexRef.current = nextIndex;
+      internalIndexRef.current = next;
     }, 3500);
   };
 
   const stopAutoPlay = () => {
-    if (autoPlayTimerRef.current) {
-      clearInterval(autoPlayTimerRef.current);
-    }
+    if (autoPlayTimerRef.current) clearInterval(autoPlayTimerRef.current);
   };
 
-  // Watch slide boundaries on continuous scrolling ticks to perform hidden snaps
   const handleScrollAction = (e: any) => {
-    const offsetX = e.nativeEvent.contentOffset.x;
-    const preciseIndex = offsetX / ITEM_LENGTH;
-    const roundedIndex = Math.round(preciseIndex);
+    const x = e.nativeEvent.contentOffset.x;
+    const exact = x / ITEM_LENGTH;
+    const round = Math.round(exact);
 
-    // Calculate indicator dots index state safely map to original data boundaries
-    if (roundedIndex >= 1 && roundedIndex <= REAL_CAROUSEL_ITEMS.length) {
-      setCurrentRealIndex(roundedIndex - 1);
-    }
+    if (round >= 1 && round <= CAROUSEL.length) setCurrentRealIndex(round - 1);
 
-    // Loop correction thresholds
-    if (preciseIndex <= 0.1) {
-      // Invisible teleport snap to true last item when hitting cloned tail boundary
-      const targetOffset = REAL_CAROUSEL_ITEMS.length * ITEM_LENGTH;
+    if (exact <= 0.1) {
       flatListRef.current?.scrollToOffset({
-        offset: targetOffset,
+        offset: CAROUSEL.length * ITEM_LENGTH,
         animated: false,
       });
-      internalIndexRef.current = REAL_CAROUSEL_ITEMS.length;
-      setCurrentRealIndex(REAL_CAROUSEL_ITEMS.length - 1);
-    } else if (preciseIndex >= REAL_CAROUSEL_ITEMS.length + 0.9) {
-      // Invisible teleport snap to true first item when hitting cloned head boundary
+      internalIndexRef.current = CAROUSEL.length;
+      setCurrentRealIndex(CAROUSEL.length - 1);
+    } else if (exact >= CAROUSEL.length + 0.9) {
       flatListRef.current?.scrollToOffset({
         offset: ITEM_LENGTH,
         animated: false,
@@ -178,77 +237,136 @@ export default function HomeScreen() {
       internalIndexRef.current = 1;
       setCurrentRealIndex(0);
     } else {
-      internalIndexRef.current = roundedIndex;
+      internalIndexRef.current = round;
     }
   };
 
   useEffect(() => {
-    if (!loading) {
-      startAutoPlay();
-    }
+    if (!loading) startAutoPlay();
     return () => stopAutoPlay();
   }, [loading]);
 
-  const fetchHomeData = async () => {
+  // ── Fetch location-aware data ─────────────────────────────────────────────
+  const fetchData = async () => {
     try {
       if (!API_URL) return;
-      const prodResponse = await fetch(`${API_URL}/api/products`);
-      const prodData = await prodResponse.json();
 
-      if (prodResponse.ok && Array.isArray(prodData)) {
-        setProducts(prodData.slice(0, 6));
+      // Get auth token
+      const token =
+        (await AsyncStorage.getItem("access_token")) ||
+        (await AsyncStorage.getItem("nebo_token")) ||
+        (await AsyncStorage.getItem("token"));
+
+      const headers: Record<string, string> = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      // ── Recommended products (location-aware) ──────────────────────────
+      if (token) {
+        try {
+          const prodRes = await fetch(
+            `${API_URL}/api/recommendations/products?limit=10`,
+            { headers },
+          );
+          if (prodRes.ok) {
+            const data = await prodRes.json();
+            setProducts(data);
+
+            // Show the user what tier most results are
+            if (data.length > 0) {
+              const nearbyCount = data.filter(
+                (p: any) => p.match_label === "Nearby",
+              ).length;
+              if (nearbyCount > 0) {
+                setLocationLabel(`${nearbyCount} near you`);
+              }
+            }
+          } else {
+            // Fallback to plain product list
+            await fetchPlainProducts();
+          }
+        } catch {
+          await fetchPlainProducts();
+        }
+      } else {
+        await fetchPlainProducts();
       }
 
-      const userResponse = await fetch(`${API_URL}/api/users?role=farmer`);
-      if (userResponse.ok) {
-        const userData = await userResponse.json();
-        setFarmers(userData.slice(0, 4));
+      // ── Recommended farmers (location-aware) ───────────────────────────
+      if (token) {
+        try {
+          const farmerRes = await fetch(
+            `${API_URL}/api/recommendations/farmers?limit=6`,
+            { headers },
+          );
+          if (farmerRes.ok) {
+            setFarmers(await farmerRes.json());
+          } else {
+            await fetchPlainFarmers(headers);
+          }
+        } catch {
+          await fetchPlainFarmers(headers);
+        }
       } else {
-        setFarmers([
-          {
-            id: "f1",
-            full_name: "Nkomo Farms",
-            location: "Bafoussam",
-            profile_pic: null,
-          },
-          {
-            id: "f2",
-            full_name: "Green Valley Collective",
-            location: "Buea",
-            profile_pic: null,
-          },
-        ]);
+        await fetchPlainFarmers(headers);
       }
     } catch (err) {
-      console.error("Failed to load home data", err);
+      console.error("HomeScreen fetchData error:", err);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   };
 
+  const fetchPlainProducts = async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/products`);
+      if (res.ok) setProducts((await res.json()).slice(0, 10));
+    } catch {}
+  };
+
+  const fetchPlainFarmers = async (headers: Record<string, string>) => {
+    try {
+      const res = await fetch(`${API_URL}/api/users?role=farmer`, { headers });
+      if (res.ok) setFarmers((await res.json()).slice(0, 6));
+    } catch {
+      setFarmers([
+        {
+          id: "f1",
+          full_name: "Nkomo Farms",
+          location: "Bafoussam",
+          profile_pic: null,
+        },
+        {
+          id: "f2",
+          full_name: "Green Valley Collective",
+          location: "Buea",
+          profile_pic: null,
+        },
+      ]);
+    }
+  };
+
   useEffect(() => {
-    fetchHomeData();
+    fetchData();
   }, []);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    fetchHomeData();
+    fetchData();
   }, []);
 
   const hour = new Date().getHours();
   const greeting =
     hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
-  const filteredProducts = products.filter((item) => {
-    const matchesSearch = item.name
-      ?.toLowerCase()
-      .includes(search.toLowerCase());
-    if (activeCategory === "1") return matchesSearch;
-    const targetCat = CATEGORIES.find(
+  // Filter by search + category client-side
+  const filtered = products.filter((item) => {
+    const matchSearch = item.name?.toLowerCase().includes(search.toLowerCase());
+    if (activeCategory === "1") return matchSearch;
+    const target = CATEGORIES.find(
       (c) => c.id === activeCategory,
     )?.label.toLowerCase();
-    return matchesSearch && item.category?.toLowerCase() === targetCat;
+    return matchSearch && item.category?.toLowerCase() === target;
   });
 
   return (
@@ -277,8 +395,16 @@ export default function HomeScreen() {
               <Text className="text-[#1B4332] text-2xl font-black mt-0.5 tracking-tight">
                 What's fresh today?
               </Text>
+              {/* Location label */}
+              {(user?.location || locationLabel) && (
+                <View className="flex-row items-center mt-1 gap-1">
+                  <Feather name="map-pin" size={11} color="#52B788" />
+                  <Text className="text-[#52B788] text-[11px] font-semibold">
+                    {locationLabel || user?.location}
+                  </Text>
+                </View>
+              )}
             </View>
-
             <TouchableOpacity
               activeOpacity={0.8}
               onPress={() => router.push("/profile")}
@@ -292,16 +418,16 @@ export default function HomeScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* Search Action */}
+          {/* Search */}
           <View className="px-5 mb-5">
             <SearchBar value={search} onChange={setSearch} />
           </View>
 
-          {/* 🌟 TRUE CONTINUOUS INFINITE CAROUSEL SLIDER */}
+          {/* Carousel */}
           <View className="mb-6">
             <FlatList
               ref={flatListRef}
-              data={SEAMLESS_CAROUSEL_DATA}
+              data={SEAMLESS}
               horizontal
               pagingEnabled={false}
               snapToInterval={ITEM_LENGTH}
@@ -318,6 +444,7 @@ export default function HomeScreen() {
               onScrollBeginDrag={stopAutoPlay}
               onScrollEndDrag={startAutoPlay}
               scrollEventThrottle={16}
+              keyExtractor={(item, i) => `${item.id}-${i}`}
               renderItem={({ item }) => (
                 <View
                   style={{ width: SLIDE_WIDTH, marginRight: GAP }}
@@ -338,21 +465,18 @@ export default function HomeScreen() {
                   </View>
                 </View>
               )}
-              keyExtractor={(item, index) => `${item.id}-${index}`}
             />
-
-            {/* Custom Indicators referencing the real, active logical index mapping */}
             <View className="flex-row justify-center items-center mt-3 gap-1.5">
-              {REAL_CAROUSEL_ITEMS.map((_, index) => (
+              {CAROUSEL.map((_, i) => (
                 <View
-                  key={index}
-                  className={`rounded-full h-1.5 transition-all duration-200 ${currentRealIndex === index ? "w-5 bg-[#2D6A4F]" : "w-1.5 bg-[#D8F3DC]"}`}
+                  key={i}
+                  className={`rounded-full h-1.5 ${currentRealIndex === i ? "w-5 bg-[#2D6A4F]" : "w-1.5 bg-[#D8F3DC]"}`}
                 />
               ))}
             </View>
           </View>
 
-          {/* CATEGORIES */}
+          {/* Categories */}
           <View className="mb-5">
             <Text className="text-[#1B4332] font-black text-[15px] px-5 mb-3 tracking-tight">
               Categories
@@ -383,12 +507,19 @@ export default function HomeScreen() {
             </ScrollView>
           </View>
 
-          {/* FEATURED PRODUCE */}
+          {/* Featured Produce */}
           <View className="mb-6">
             <View className="flex-row items-center justify-between px-5 mb-3">
-              <Text className="text-[#1B4332] font-black text-[15px] tracking-tight">
-                Featured Produce
-              </Text>
+              <View>
+                <Text className="text-[#1B4332] font-black text-[15px] tracking-tight">
+                  Featured Produce
+                </Text>
+                {locationLabel ? (
+                  <Text className="text-[#52B788] text-[11px] font-semibold mt-0.5">
+                    📍 {locationLabel}
+                  </Text>
+                ) : null}
+              </View>
               <TouchableOpacity onPress={() => router.push("/marketplace")}>
                 <Text className="text-[#52B788] text-[13px] font-bold">
                   See all
@@ -398,7 +529,7 @@ export default function HomeScreen() {
 
             {loading ? (
               <ActivityIndicator color="#1B4332" className="my-10" />
-            ) : filteredProducts.length === 0 ? (
+            ) : filtered.length === 0 ? (
               <View className="mx-5 bg-[#F0FAF4] rounded-2xl p-8 items-center border border-dashed border-[#D8F3DC]">
                 <Text className="text-xl mb-1">🍃</Text>
                 <Text className="text-[#2D6A4F] text-xs font-bold">
@@ -411,19 +542,26 @@ export default function HomeScreen() {
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={{ paddingHorizontal: 20 }}
               >
-                {filteredProducts.map((item) => (
+                {filtered.map((item) => (
                   <ProductCard key={item.id} item={item} router={router} />
                 ))}
               </ScrollView>
             )}
           </View>
 
-          {/* NEARBY FARMERS */}
+          {/* Nearby Farmers */}
           <View className="px-5">
             <View className="flex-row items-center justify-between mb-3">
-              <Text className="text-[#1B4332] font-black text-[15px] tracking-tight">
-                Nearby Farmers
-              </Text>
+              <View>
+                <Text className="text-[#1B4332] font-black text-[15px] tracking-tight">
+                  Nearby Farmers
+                </Text>
+                {user?.location && (
+                  <Text className="text-[#52B788] text-[11px] font-semibold mt-0.5">
+                    📍 Near {user.location}
+                  </Text>
+                )}
+              </View>
               <TouchableOpacity>
                 <Text className="text-[#52B788] text-[13px] font-bold">
                   See all
@@ -436,13 +574,10 @@ export default function HomeScreen() {
                 key={farmer.id}
                 className="flex-row items-center bg-white rounded-2xl p-4 mb-3 border border-[#D8F3DC] shadow-sm"
               >
-                {/* Nearby Farmers Image Logic */}
                 <View className="w-12 h-12 rounded-xl bg-[#F0FAF4] items-center justify-center mr-3.5 border border-[#D8F3DC] overflow-hidden">
-                  {farmer.profile_pic || farmer.avatar_url ? (
+                  {farmer.avatar_url || farmer.profile_pic ? (
                     <Image
-                      source={{
-                        uri: farmer.profile_pic || farmer.avatar_url,
-                      }}
+                      source={{ uri: farmer.avatar_url || farmer.profile_pic }}
                       className="w-full h-full"
                       resizeMode="cover"
                     />
@@ -450,28 +585,38 @@ export default function HomeScreen() {
                     <Ionicons name="person-outline" size={24} color="#1B7344" />
                   )}
                 </View>
-
                 <View className="flex-1">
-                  <Text className="text-[#1B4332] font-black text-[14px]">
-                    {farmer.full_name || farmer.name}
-                  </Text>
-                  <View className="flex-row items-center mt-1">
-                    <Feather
-                      name="map-pin"
-                      size={11}
-                      color="#52B788"
-                      style={{ marginRight: 3 }}
-                    />
+                  <View className="flex-row items-center gap-1.5">
+                    <Text className="text-[#1B4332] font-black text-[14px]">
+                      {farmer.full_name || farmer.name}
+                    </Text>
+                    {farmer.is_verified && (
+                      <Text style={{ fontSize: 12 }}>✅</Text>
+                    )}
+                  </View>
+                  <View className="flex-row items-center mt-0.5 gap-1">
+                    <Feather name="map-pin" size={11} color="#52B788" />
                     <Text className="text-[#95D5B2] text-xs font-bold">
                       {farmer.location || "Cameroon"}
                     </Text>
                   </View>
+                  {/* Match badge */}
+                  {farmer.match_label &&
+                    farmer.match_label !== "Recommended" && (
+                      <MatchBadge label={farmer.match_label} />
+                    )}
+                  {/* Product count */}
+                  {farmer.product_count > 0 && (
+                    <Text className="text-[#B7E4C7] text-[10px] mt-0.5">
+                      {farmer.product_count} product
+                      {farmer.product_count !== 1 ? "s" : ""} listed
+                    </Text>
+                  )}
                 </View>
-
-                {/* Your Custom Button */}
                 <MessageFarmerButton
                   farmerId={farmer.id}
                   farmerName={farmer.full_name || farmer.name || "Farmer"}
+                  farmerPhone={farmer.phone}
                   variant="icon"
                 />
               </View>
@@ -480,50 +625,5 @@ export default function HomeScreen() {
         </ScrollView>
       </SafeAreaView>
     </View>
-  );
-}
-
-function ProductCard({ item, router }: { item: any; router: any }) {
-  const displayImageUri =
-    item?.photos && item.photos.length > 0 ? item.photos[0] : null;
-
-  return (
-    <TouchableOpacity
-      onPress={() => router.push(`/product/${item.id}`)}
-      activeOpacity={0.85}
-      className="w-40 rounded-[28px] p-2 mr-3.5 border border-[#D8F3DC] bg-white shadow-sm"
-    >
-      <View className="h-[110px] rounded-2xl items-center justify-center mb-2.5 bg-[#F0FAF4] overflow-hidden border border-[#E2F5E9]">
-        {displayImageUri ? (
-          <Image
-            source={{ uri: displayImageUri }}
-            className="w-full h-full"
-            resizeMode="cover"
-          />
-        ) : (
-          <Text className="text-4xl">{getProductEmoji(item.category)}</Text>
-        )}
-      </View>
-      <View className="px-1.5 pb-1">
-        <Text
-          className="text-[#1B4332] font-extrabold text-[13px]"
-          numberOfLines={1}
-        >
-          {item.name}
-        </Text>
-        <Text
-          className="text-[#52B788] text-[11px] font-semibold mt-0.5"
-          numberOfLines={1}
-        >
-          {item.farmer_name || "Verified Merchant"}
-        </Text>
-
-        <View className="flex-row items-center justify-between mt-2 pt-1 border-t border-[#F0FAF4]">
-          <Text className="text-[#2D6A4F] font-black text-[13px]">
-            {item.price} XAF
-          </Text>
-        </View>
-      </View>
-    </TouchableOpacity>
   );
 }

@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import Constants from "expo-constants";
+import { DeviceEventEmitter } from "react-native";
 
 const BASE_URL =
   Constants.expoConfig?.extra?.API_URL 
@@ -47,6 +48,8 @@ apiClient.interceptors.response.use(
         "nebo_role",
         "nebo_user",
       ]);
+
+      DeviceEventEmitter.emit("session-expired");
 
       console.log("Session expired. User should be logged out.");
     }
