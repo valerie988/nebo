@@ -53,27 +53,24 @@ export default function LoginScreen() {
       setLoading(false); // Make sure to stop loading
 
       if (err.response) {
-        // The server responded with a status code outside the 2xx range
         console.log("SERVER ERROR:", err.response.data);
         setError(err.response.data.detail || "Authentication failed");
       } else if (err.request) {
-        // The request was made but no response was received
         console.log("NETWORK ERROR (No response):", err.request);
         setError("Cannot connect to server. Check your internet.");
       } else {
-        // Something happened in setting up the request
         console.log("REQUEST SETUP ERROR:", err.message);
         setError("Error: " + err.message);
       }
     }
-  }; 
+  };
 
   return (
     <View className="flex-1 bg-primary">
       <SafeAreaView className="flex-1">
         <KeyboardAvoidingView
           className="flex-1"
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
           <ScrollView
             contentContainerStyle={{ flexGrow: 1 }}

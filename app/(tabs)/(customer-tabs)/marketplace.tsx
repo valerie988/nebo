@@ -181,52 +181,94 @@ export default function MarketplaceScreen() {
     </View>
   );
 }
-
-function LargeProductCard({ item, router }: { item: any; router: any }) {
+function LargeProductCard({
+  item,
+  router,
+}: {
+  item: any;
+  router: any;
+}) {
   return (
-    <View className="bg-white rounded-3xl mb-6 border border-[#D8F3DC] shadow-sm overflow-hidden">
-      <View className="w-full h-48 bg-[#E9F5EF]">
+    <View className="bg-white rounded-[28px] overflow-hidden mb-6 shadow-md border border-[#E9F5EF]">
+
+      {/* Product Image */}
+      <View className="relative">
         {item.photos?.[0] ? (
           <Image
             source={{ uri: item.photos[0] }}
-            className="w-full h-full"
+            className="w-full h-56"
             resizeMode="cover"
           />
         ) : (
-          <View className="flex-1 items-center justify-center">
-            <Text className="text-5xl">🥦</Text>
+          <View className="h-56 bg-[#E9F5EF] items-center justify-center">
+            <Text className="text-6xl">🥦</Text>
           </View>
         )}
+
+        {/* Category Badge */}
+        <View className="absolute top-4 left-4 bg-white/90 px-3 py-1 rounded-full">
+          <Text className="text-[#2D6A4F] font-semibold text-xs">
+            {item.category || "Vegetables"}
+          </Text>
+        </View>
       </View>
 
+      {/* Content */}
       <View className="p-5">
-        <Text className="text-[#1B4332] font-black text-2xl mb-1">
-          {item.name}
-        </Text>
-        <Text className="text-[#2D6A4F] font-bold text-lg mb-3">
-          {item.price} XAF
-        </Text>
+
+        {/* Name & Price */}
+        <View className="flex-row justify-between items-start mb-2">
+          <View className="flex-1 pr-3">
+            <Text
+              className="text-[#1B4332] text-xl font-extrabold"
+              numberOfLines={1}
+            >
+              {item.name}
+            </Text>
+
+            <Text className="text-[#95A5A6] text-sm mt-1">
+              By {item.farmer_name || item.farmer?.full_name || "Farmer"}
+            </Text>
+          </View>
+
+          <View className="bg-[#F1FAF4] px-4 py-2 rounded-xl">
+            <Text className="text-[#2D6A4F] font-black text-lg">
+              {item.price}
+            </Text>
+            <Text className="text-[#52B788] text-xs text-center">
+              XAF
+            </Text>
+          </View>
+        </View>
+
+        {/* Description */}
         <Text
-          className="text-[#52B788] text-[14px] leading-5 mb-5"
+          className="text-[#6B7280] text-sm leading-5 mb-4"
           numberOfLines={2}
         >
           {item.description ||
             "Fresh, quality produce harvested directly from local farms."}
         </Text>
 
+        {/* Buttons */}
         <View className="flex-row gap-3">
           <TouchableOpacity
             onPress={() => router.push(`/product/${item.id}`)}
-            className="flex-1 bg-[#1B4332] py-4 rounded-xl items-center border border-[#D8F3DC]"
+            className="flex-1 bg-[#1B4332] py-4 rounded-2xl items-center"
           >
-            <Text className="text-white font-bold">View More</Text>
+            <Text className="text-white font-bold">
+              View Details
+            </Text>
           </TouchableOpacity>
 
-          {/* Using the component directly */}
           <MessageFarmerButton
             farmerId={item.farmer_id}
-            farmerName={item.farmer_name || item.farmer?.full_name || "Farmer"}
-            variant="button"
+            farmerName={
+              item.farmer_name ||
+              item.farmer?.full_name ||
+              "Farmer"
+            }
+    
           />
         </View>
       </View>

@@ -36,9 +36,7 @@ export default ({ config }) => {
       },
 
       extra: {
-        API_URL: isDev
-          ? "http://192.168.2.105:8000"
-          : "https://nebo-production.up.railway.app",
+        API_URL: "https://overflowing-warmth-production-f457.up.railway.app",
 
         eas: {
           projectId: "7282f621-51a5-444f-bca6-955b4499d7a8",
