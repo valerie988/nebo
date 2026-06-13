@@ -43,4 +43,4 @@ app-example
 /android
 backend/.env
 .env
-**/venv/
+backend/venv/
