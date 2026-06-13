@@ -234,7 +234,7 @@ def recommend_products(
             "unit":        p.unit,
             "quantity":    p.quantity,
             "location":    p.location,
-            "image":       p.image,
+            "image": (p.photos[0] if p.photos and len(p.photos) > 0 else None),
             "in_stock":    p.in_stock,
             "created_at":  p.created_at.isoformat() if p.created_at else None,
             "farmer_id":   p.farmer_id,
