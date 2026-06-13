@@ -8,12 +8,17 @@ const CATEGORIES = [
   { id: "5", label: "Herbs", emoji: "🌿" },
   { id: "6", label: "Roots", emoji: "🥕" },
 ];
+import { Dimensions } from "react-native";
+
+const { width } = Dimensions.get("window");
+
+const scale = (size: number) => (width / 375) * size;
 
 export function CategoryBar({ activeId, onSelect }: { activeId: string, onSelect: (id: string) => void }) {
   return (
     <View className="mb-5">
       <Text className="text-[#1B4332] font-bold text-[15px] px-5 mb-3">Categories</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20 }}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: scale(16)}}>
         {CATEGORIES.map((cat) => (
           <TouchableOpacity
             key={cat.id}

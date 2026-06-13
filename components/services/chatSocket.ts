@@ -105,13 +105,10 @@ class ChatSocket {
               return;
             }
 
-            // ── KEY FIX: ensure conversation exists in THIS user's storage ──
-            // with the sender (other person) as the participant.
-            // This is what makes the farmer see the CUSTOMER's name.
-            const senderRole = data.sender_role || "customer"; // backend sends this
+            const senderRole = data.sender_role || "customer"; 
             await chatService.getOrCreateConversation(this.userId, {
               participantId:    data.sender_id,
-              participantName:  data.sender_name,   // ← customer's name for farmer
+              participantName:  data.sender_name,  
               participantRole:  senderRole,
               serverConvoId:    data.conversation_id,
             });

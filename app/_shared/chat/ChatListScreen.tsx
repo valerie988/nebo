@@ -10,6 +10,10 @@ import { Alert, FlatList, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 const API_URL = Constants.expoConfig?.extra?.API_URL || "http://localhost:8000";
+import { Dimensions } from "react-native";
+
+const { width } = Dimensions.get("window");
+const scale = (size: number) => (width / 375) * size;
 
 function formatTime(iso: string): string {
   if (!iso) return "";
@@ -308,7 +312,7 @@ export default function ChatListScreen() {
       <SafeAreaView style={{ flex: 1 }}>
         <View
           style={{
-            paddingHorizontal: 20,
+            paddingHorizontal: scale(16),
             paddingTop: 20,
             paddingBottom: 12,
             flexDirection: "row",

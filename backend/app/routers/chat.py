@@ -1,7 +1,3 @@
-"""
-app/routers/chat.py
-Replace your existing chat.py with this file.
-"""
 
 import json
 import uuid
@@ -23,47 +19,7 @@ chat_router = APIRouter(prefix="/chat", tags=["chat"])
 
 THREE_DAYS = timedelta(days=3)
 
-
-# ── Connection manager ────────────────────────────────────────────────────────
-
-class ConnectionManager:
-    def __init__(self):
-        self.active: Dict[str, List[WebSocket]] = {}
-
-    async def connect(self, user_id: str, ws: WebSocket):
-        await ws.accept()
-        self.active.setdefault(user_id, []).append(ws)
-
-    def disconnect(self, user_id: str, ws: WebSocket):
-        conns = self.active.get(user_id, [])
-        try:    conns.remove(ws)
-        except: pass
-        if not conns:
-            self.active.pop(user_id, None)
-
-    def is_online(self, user_id: str) -> bool:
-        return bool(self.active.get(user_id))
-
-    async def send_to(self, user_id: str, data: dict) -> bool:
-        delivered = False
-        dead = []
-        for ws in self.active.get(user_id, []):
-            try:
-                await ws.send_json(data)
-                delivered = True
-            except:
-                dead.append(ws)
-        for ws in dead:
-            try: self.active.get(user_id, []).remove(ws)
-            except: pass
-        return delivered
-
-
-manager = ConnectionManager()
-
-
-# ── Helpers ───────────────────────────────────────────────────────────────────
-
+ 
 def utcnow():
     return datetime.now(timezone.utc)
 
@@ -187,6 +143,8 @@ async def websocket_endpoint(ws: WebSocket, token: str, db: Session = Depends(ge
                 except: pass
 
     except WebSocketDisconnect:
+        manager.disconnect(user_id, ws)
+    finally:
         manager.disconnect(user_id, ws)
 
 

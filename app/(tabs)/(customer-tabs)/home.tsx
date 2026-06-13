@@ -20,6 +20,9 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Circle, Path, Svg } from "react-native-svg";
 
+const { width } = Dimensions.get("window");
+
+const scale = (size: number) => (width / 375) * size;
 const API_URL = Constants.expoConfig?.extra?.API_URL;
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const SLIDE_WIDTH = SCREEN_WIDTH - 40;
@@ -93,9 +96,9 @@ function MatchBadge({ label }: { label?: string }) {
   if (!label) return null;
   const map: Record<string, { bg: string; text: string; icon: string }> = {
     Nearby: { bg: "#D8F3DC", text: "#1B4332", icon: "📍" },
-    "Your Region": { bg: "#FEF3C7", text: "#92400E", icon: "🗺️" },
-    Recommended: { bg: "#EDE9FE", text: "#5B21B6", icon: "✨" },
-    Explore: { bg: "#F1F5F9", text: "#475569", icon: "🌍" },
+    "Your Region": { bg: "#FEF3C7", text: "#92400E", icon: "" },
+    Recommended: { bg: "#EDE9FE", text: "#5B21B6", icon: "" },
+    Explore: { bg: "#F1F5F9", text: "#475569", icon: "" },
   };
   const c = map[label] || map["Explore"];
   return (
@@ -431,7 +434,7 @@ export default function HomeScreen() {
           {/* Header */}
           <View
             style={{
-              paddingHorizontal: 20,
+              paddingHorizontal: scale(16),
               paddingTop: 16,
               paddingBottom: 12,
               flexDirection: "row",
@@ -504,7 +507,7 @@ export default function HomeScreen() {
           </View>
 
           {/* Search */}
-          <View style={{ paddingHorizontal: 20, marginBottom: 20 }}>
+          <View style={{ paddingHorizontal: scale(16), marginBottom: 20 }}>
             <View
               style={{
                 flexDirection: "row",
@@ -558,7 +561,7 @@ export default function HomeScreen() {
               snapToInterval={ITEM_LENGTH}
               decelerationRate="fast"
               showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ paddingHorizontal: 20 }}
+              contentContainerStyle={{ paddingHorizontal: scale(16)}}
               initialScrollIndex={1}
               getItemLayout={(_, i) => ({
                 length: ITEM_LENGTH,
@@ -654,7 +657,7 @@ export default function HomeScreen() {
                 color: "#1B4332",
                 fontWeight: "900",
                 fontSize: 15,
-                paddingHorizontal: 20,
+                paddingHorizontal: scale(16),
                 marginBottom: 12,
               }}
             >
@@ -663,7 +666,7 @@ export default function HomeScreen() {
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ paddingHorizontal: 20 }}
+              contentContainerStyle={{ paddingHorizontal: scale(16) }}
             >
               {FILTERS.map((f) => (
                 <TouchableOpacity
@@ -706,7 +709,7 @@ export default function HomeScreen() {
                 flexDirection: "row",
                 alignItems: "center",
                 justifyContent: "space-between",
-                paddingHorizontal: 20,
+                paddingHorizontal: scale(16),
                 marginBottom: 12,
               }}
             >
@@ -772,7 +775,7 @@ export default function HomeScreen() {
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ paddingHorizontal: 20 }}
+                contentContainerStyle={{ paddingHorizontal: scale(16) }}
               >
                 {displayed.map((item) => (
                   <ProductCard key={item.id} item={item} router={router} />
@@ -782,7 +785,7 @@ export default function HomeScreen() {
           </View>
 
           {/* Nearby Farmers */}
-          <View style={{ paddingHorizontal: 20 }}>
+          <View style={{ paddingHorizontal: scale(16) }}>
             <View
               style={{
                 flexDirection: "row",
