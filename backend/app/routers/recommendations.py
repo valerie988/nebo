@@ -1,34 +1,3 @@
-"""
-app/routers/recommendations.py
-─────────────────────────────────────────────────────────────────────────────
-Hybrid Recommendation System — 4 signals combined:
-
-  Final Score = (Location × 40%) + (Collaborative × 35%) + (Recency × 15%) + (Popularity × 10%)
-
-  1. LOCATION (40%)
-     Jaccard token similarity between customer location and product/farmer location.
-     Exact city → 1.0, same region → 0.5, national fallback → 0.1
-
-  2. COLLABORATIVE FILTERING (35%)
-     Item-item collaborative filtering using view history:
-     - Find users who viewed the same products as the current user
-     - Surface products those similar users also viewed
-     - Score = overlap of viewing patterns (normalised 0-1)
-     - Cold start safe: weight scales from 0 → 35% as view data grows (min 10 events)
-
-  3. RECENCY (15%)
-     Products listed today = 1.0, 30+ days old = 0.0. Linear decay.
-
-  4. POPULARITY (10%)
-     Based on total view count from view_events table.
-     Normalised across all products (most viewed = 1.0).
-
-Endpoints:
-  GET  /api/recommendations/products?limit=10  → scored product list
-  GET  /api/recommendations/farmers?limit=6    → location-scored farmer list
-  POST /api/recommendations/view               → { "product_id": "uuid" }
-  GET  /api/recommendations/history            → what this user has viewed
-"""
 
 from collections import defaultdict
 from datetime    import datetime, timezone, timedelta

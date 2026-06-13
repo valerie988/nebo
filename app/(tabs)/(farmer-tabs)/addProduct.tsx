@@ -123,11 +123,10 @@ export default function AddProductScreen() {
           name: filename,
           type: type,
         } as any);
-        // ✅ Load from your frontend .env automatically
-        const CLOUD_NAME = process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME;
-        const UPLOAD_PRESET = process.env.EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
+        const CLOUD_NAME = Constants.expoConfig?.extra?.CLOUDINARY_CLOUD_NAME;
 
-        // 🛑 Sanity Check: If these are undefined, the upload will fail
+        const UPLOAD_PRESET =
+          Constants.expoConfig?.extra?.CLOUDINARY_UPLOAD_PRESET;
         if (!CLOUD_NAME || !UPLOAD_PRESET) {
           console.error("❌ Environment variables missing!", {
             CLOUD_NAME,

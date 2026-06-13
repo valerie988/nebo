@@ -14,10 +14,8 @@ from app.routers.notifications import router as notification_router
 from app.routers.admin import admin_router
 from app.routers.orders import router as orders_router
 from app.routers.chat import chat_router
+from app.routers.recommendations import recommendations_router
 
-# =========================
-# 1. CREATE APP FIRST
-# =========================
 app = FastAPI(
     title="NEBO API",
     description="Backend for NEBO — connecting farmers with customers",
@@ -96,10 +94,8 @@ app.include_router(admin_router, prefix="/api")
 app.include_router(orders_router, prefix="/api/orders", tags=["orders"])
 app.include_router(notification_router, prefix="/api")
 app.include_router(chat_router, prefix="/api")
+app.include_router(recommendations_router, prefix="/api")
 
-# =========================
-# 8. HEALTH CHECK
-# =========================
 @app.get("/health", tags=["health"])
 def health():
     return {"status": "ok", "app": "NEBO API"}

@@ -38,6 +38,12 @@ export default ({ config }) => {
       extra: {
         API_URL: "https://overflowing-warmth-production-f457.up.railway.app",
 
+        CLOUDINARY_CLOUD_NAME:
+          process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME,
+
+        CLOUDINARY_UPLOAD_PRESET:
+          process.env.EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET,
+
         eas: {
           projectId: "7282f621-51a5-444f-bca6-955b4499d7a8",
         },
