@@ -1,6 +1,7 @@
-import { View, Text, Image, TouchableOpacity, Dimensions } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
+import { Dimensions, Image, Text, TouchableOpacity, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 const { height } = Dimensions.get("window");
 
@@ -8,10 +9,8 @@ export default function Onboarding1() {
   const router = useRouter();
 
   return (
-
     <View className="flex-1 bg-primary">
       <SafeAreaView className="flex-1">
-        
         {/* IMAGE — Top Area */}
         <View className="flex-1 items-center justify-center">
           <Image
@@ -39,7 +38,10 @@ export default function Onboarding1() {
 
           {/* BUTTON */}
           <TouchableOpacity
-            onPress={() => router.push("/(auth)/login")}
+            onPress={async () => {
+              await AsyncStorage.setItem("has_seen_onboarding", "true");
+              router.replace("/(auth)/login");
+            }}
             className="bg-[#1B6E3C] mt-9 px-16 py-4 rounded-full"
             activeOpacity={0.85}
           >
@@ -48,7 +50,6 @@ export default function Onboarding1() {
             </Text>
           </TouchableOpacity>
         </View>
-
       </SafeAreaView>
     </View>
   );

@@ -1,18 +1,15 @@
 import { AuthProvider, useAuth } from "@/components/context/AuthContext";
+import { NotificationsProvider } from "@/components/context/NotificationsContext";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Slot, useRouter, useSegments } from "expo-router";
-import { useEffect } from "react";
-import { NotificationsProvider } from '@/components/context/NotificationsContext';
+import { useEffect, useState } from "react";
 import { ActivityIndicator, View } from "react-native";
 import {
   configureReanimatedLogger,
   ReanimatedLogLevel,
 } from "react-native-reanimated";
 
-// Disable reanimated warnings
-configureReanimatedLogger({
-  level: ReanimatedLogLevel.warn,
-  strict: false,
-});
+configureReanimatedLogger({ level: ReanimatedLogLevel.warn, strict: false });
 
 // @ts-ignore
 import "../global.css";
@@ -21,37 +18,43 @@ function RootLayoutNav() {
   const { token, role, isLoading } = useAuth();
   const segments = useSegments();
   const router = useRouter();
+  const [hasSeenOnboarding, setHasSeenOnboarding] = useState<boolean | null>(
+    null,
+  );
 
- useEffect(() => {
-  console.log("ROOT NAV", {
-    token,
-    role,
-    isLoading,
-    segments,
-  });
+  // ✅ Re-reads AsyncStorage every time the route changes
+  useEffect(() => {
+    AsyncStorage.getItem("has_seen_onboarding").then((val) => {
+      setHasSeenOnboarding(val === "true");
+    });
+  }, [segments]);
 
-  if (isLoading) return;
+  useEffect(() => {
+    if (isLoading || hasSeenOnboarding === null) return;
 
-  const inAuthGroup = segments[0] === "(auth)";
+    const inAuthGroup = segments[0] === "(auth)";
+    const inOnboarding = segments[0] === "(onboarding)";
 
-  if (!token) {
-    if (!inAuthGroup) {
-      router.replace("/(auth)/login");
+    if (!token) {
+      if (!hasSeenOnboarding && !inOnboarding) {
+        router.replace("/(onboarding)/1");
+      } else if (hasSeenOnboarding && !inAuthGroup) {
+        router.replace("/(auth)/login");
+      }
+      return;
     }
-    return;
-  }
 
-  if (inAuthGroup) {
-    const homePath =
-      role === "farmer"
-        ? "/(tabs)/(farmer-tabs)/home"
-        : "/(tabs)/(customer-tabs)/home";
+    // Logged in — send to correct home
+    if (inAuthGroup || inOnboarding) {
+      router.replace(
+        role === "farmer"
+          ? "/(tabs)/(farmer-tabs)/home"
+          : "/(tabs)/(customer-tabs)/home",
+      );
+    }
+  }, [token, role, isLoading, segments, hasSeenOnboarding]);
 
-    router.replace(homePath as any);
-  }
-}, [token, role, isLoading, segments]);
-
-  if (isLoading) {
+  if (isLoading || hasSeenOnboarding === null) {
     return (
       <View className="flex-1 items-center justify-center bg-[#F8FDF9]">
         <ActivityIndicator size="large" color="#1B4332" />
@@ -66,7 +69,7 @@ export default function RootLayout() {
   return (
     <AuthProvider>
       <NotificationsProvider>
-      <RootLayoutNav />
+        <RootLayoutNav />
       </NotificationsProvider>
     </AuthProvider>
   );
