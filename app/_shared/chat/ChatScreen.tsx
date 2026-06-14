@@ -19,6 +19,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
 function formatMsgTime(iso: string): string {
   try {
     const d = new Date(iso);
@@ -30,7 +31,7 @@ function formatMsgTime(iso: string): string {
   }
 }
 
-function isSameDay(a: string, b: string): boolean {
+function isSameDay(a: string, b: string) {
   return new Date(a).toDateString() === new Date(b).toDateString();
 }
 
@@ -119,7 +120,7 @@ function Bubble({ msg, isMe }: { msg: Message; isMe: boolean }) {
                 color: msg.pending ? "#B7E4C7" : "#52B788",
               }}
             >
-              {msg.pending ? "Pending" : msg.synced ? "Sent" : "Sending"}
+              {msg.pending ? "⏳" : msg.synced ? "✓✓" : "✓"}
             </Text>
           )}
         </View>
@@ -149,7 +150,7 @@ function buildItems(messages: Message[]): ListItem[] {
   return items;
 }
 
-export default function ChatScreen() {
+export function ChatScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const params = useLocalSearchParams<{
@@ -163,7 +164,6 @@ export default function ChatScreen() {
   const convoId = params.id;
   const participantName = params.participantName ?? "Chat";
   const participantPhone = params.participantPhone || "";
-
   const userId = user?.id || (user as any)?.user_id || "";
   const userName = user?.full_name || (user as any)?.name || "Me";
 
@@ -174,6 +174,7 @@ export default function ChatScreen() {
   const [sending, setSending] = useState(false);
 
   const listRef = useRef<FlatList>(null);
+  const inputRef = useRef<TextInput>(null);
 
   const scrollToBottom = (animated = true) =>
     setTimeout(() => listRef.current?.scrollToEnd({ animated }), 80);
@@ -189,49 +190,39 @@ export default function ChatScreen() {
 
   useEffect(() => {
     loadMessages();
-
-    Promise.all([
-      AsyncStorage.getItem("access_token"),
-      AsyncStorage.getItem("nebo_token"),
-      AsyncStorage.getItem("token"),
-    ]).then(([t1, t2, t3]) => {
-      const token = t1 || t2 || t3;
+    AsyncStorage.getItem("access_token").then((token) => {
       if (token && userId) chatSocket.connect(token, userId);
     });
-
-    const unsubStatus = chatSocket.onStatus(setOnline);
-    const unsubMsg = chatSocket.onMessage(async (msg) => {
+    const u1 = chatSocket.onStatus(setOnline);
+    const u2 = chatSocket.onMessage(async (msg) => {
       if (msg.conversationId !== convoId) return;
-
       setMessages((prev) => {
-        const existsAsLocal = prev.some((m) => m.id === msg.id || m.localId === msg.id);
-        if (existsAsLocal) {
+        const exists = prev.some(
+          (m) => m.id === msg.id || m.localId === msg.id,
+        );
+        if (exists) {
           return prev.map((m) =>
             m.id === msg.id || m.localId === msg.id
               ? { ...m, id: msg.id, pending: false, synced: true }
-              : m
+              : m,
           );
         }
         return [...prev, msg];
       });
-
       scrollToBottom(true);
       if (userId) await chatService.markAsRead(userId, convoId);
     });
-
     return () => {
-      unsubStatus();
-      unsubMsg();
+      u1();
+      u2();
     };
   }, [userId, convoId]);
 
   const handleSend = useCallback(async () => {
     const trimmed = text.trim();
     if (!trimmed || !userId || sending) return;
-
     setText("");
     setSending(true);
-
     try {
       const msg = await chatService.sendMessage(userId, {
         conversationId: convoId,
@@ -241,10 +232,8 @@ export default function ChatScreen() {
         receiverName: participantName,
         text: trimmed,
       });
-
       setMessages((prev) => [...prev, msg]);
       scrollToBottom(true);
-
       chatSocket.send({
         localId: msg.localId!,
         receiverId: params.participantId,
@@ -254,16 +243,30 @@ export default function ChatScreen() {
     } finally {
       setSending(false);
     }
-  }, [text, userId, userName, convoId, params.participantId, participantName, sending]);
+  }, [
+    text,
+    userId,
+    userName,
+    convoId,
+    params.participantId,
+    participantName,
+    sending,
+  ]);
 
   const handleCall = () => {
     if (!participantPhone) {
-      Alert.alert("No Phone Number", `${participantName} has not shared a phone number.`);
+      Alert.alert(
+        "No Phone Number",
+        `${participantName} hasn't added a phone number.`,
+      );
       return;
     }
-    Alert.alert("Call", `Would you like to call ${participantName}?`, [
+    Alert.alert(`Call ${participantName}`, participantPhone, [
       { text: "Cancel", style: "cancel" },
-      { text: "Call", onPress: () => Linking.openURL(`tel:${participantPhone}`) },
+      {
+        text: "Call",
+        onPress: () => Linking.openURL(`tel:${participantPhone}`),
+      },
     ]);
   };
 
@@ -272,61 +275,226 @@ export default function ChatScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: "#F0FAF4" }}>
       <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
-        <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12, backgroundColor: "#FFFFFF", borderBottomWidth: 0.5, borderBottomColor: "#D8F3DC", elevation: 2 }}>
-          <TouchableOpacity onPress={() => router.back()} style={{ marginRight: 12, padding: 4 }}>
+        {/* Header */}
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            paddingHorizontal: 16,
+            paddingVertical: 12,
+            backgroundColor: "#FFFFFF",
+            borderBottomWidth: 0.5,
+            borderBottomColor: "#D8F3DC",
+            elevation: 2,
+            shadowColor: "#000",
+            shadowOpacity: 0.05,
+            shadowRadius: 4,
+          }}
+        >
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={{ marginRight: 12, padding: 4 }}
+          >
             <Ionicons name="arrow-back" size={24} color="#1B4332" />
           </TouchableOpacity>
-
-          <View style={{ width: 40, height: 40, borderRadius: 12, marginRight: 10, backgroundColor: params.participantRole === "farmer" ? "#D8F3DC" : "#DBEAFE", alignItems: "center", justifyContent: "center" }}>
-            <Text style={{ fontWeight: "700", fontSize: 14, color: params.participantRole === "farmer" ? "#1B4332" : "#1E40AF" }}>
-              {participantName.split(" ").map((n: string) => n[0]).slice(0, 2).join("").toUpperCase()}
+          <View
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: 12,
+              marginRight: 10,
+              backgroundColor: "#DBEAFE",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Text style={{ fontWeight: "700", fontSize: 14, color: "#1E40AF" }}>
+              {participantName
+                .split(" ")
+                .map((n: string) => n[0])
+                .slice(0, 2)
+                .join("")
+                .toUpperCase()}
             </Text>
           </View>
-
           <View style={{ flex: 1 }}>
-            <Text style={{ color: "#1B4332", fontWeight: "700", fontSize: 16 }} numberOfLines={1}>{participantName}</Text>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 5, marginTop: 1 }}>
-              <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: online ? "#52B788" : "#B7E4C7" }} />
-              <Text style={{ color: "#95D5B2", fontSize: 11 }}>{online ? "Online" : "Offline"}</Text>
+            <Text
+              style={{ color: "#1B4332", fontWeight: "700", fontSize: 16 }}
+              numberOfLines={1}
+            >
+              {participantName}
+            </Text>
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 5,
+                marginTop: 1,
+              }}
+            >
+              <View
+                style={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: 3,
+                  backgroundColor: online ? "#52B788" : "#B7E4C7",
+                }}
+              />
+              <Text style={{ color: "#95D5B2", fontSize: 11 }}>
+                {online ? "Online" : "Offline — messages queued"}
+              </Text>
             </View>
           </View>
-
-          <TouchableOpacity onPress={handleCall} style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: participantPhone ? "#1B4332" : "#F0FAF4", alignItems: "center", justifyContent: "center" }}>
-            <Ionicons name="call" size={20} color={participantPhone ? "#D8F3DC" : "#B7E4C7"} />
+          <TouchableOpacity
+            onPress={handleCall}
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: 12,
+              backgroundColor: participantPhone ? "#1B4332" : "#F0FAF4",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Ionicons
+              name="call"
+              size={20}
+              color={participantPhone ? "#D8F3DC" : "#B7E4C7"}
+            />
           </TouchableOpacity>
         </View>
 
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+        {/* Messages */}
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          keyboardVerticalOffset={0}
+        >
           {loading ? (
-            <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}><ActivityIndicator color="#52B788" /></View>
+            <View
+              style={{
+                flex: 1,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <ActivityIndicator color="#52B788" />
+            </View>
           ) : (
             <FlatList
               ref={listRef}
               data={items}
               keyExtractor={(i) => i.key}
               contentContainerStyle={{ paddingVertical: 12, paddingBottom: 8 }}
+              showsVerticalScrollIndicator={false}
               onContentSizeChange={() => scrollToBottom(false)}
               ListEmptyComponent={
-                <View style={{ alignItems: "center", justifyContent: "center", marginTop: 80, paddingHorizontal: 40 }}>
-                  <Text style={{ color: "#1B4332", fontWeight: "700", fontSize: 16 }}>Start your conversation</Text>
-                  <Text style={{ color: "#95D5B2", fontSize: 13, marginTop: 6, textAlign: "center" }}>
-                    Messages are stored locally and will be removed after 3 days.
+                <View
+                  style={{
+                    alignItems: "center",
+                    justifyContent: "center",
+                    marginTop: 80,
+                  }}
+                >
+                  <Text style={{ fontSize: 36, marginBottom: 12 }}>👋</Text>
+                  <Text
+                    style={{
+                      color: "#1B4332",
+                      fontWeight: "700",
+                      fontSize: 16,
+                    }}
+                  >
+                    Say hello to {participantName.split(" ")[0]}!
+                  </Text>
+                  <Text
+                    style={{
+                      color: "#95D5B2",
+                      fontSize: 13,
+                      marginTop: 6,
+                      textAlign: "center",
+                      paddingHorizontal: 40,
+                    }}
+                  >
+                    Messages save on your device.{"\n"}Auto-delete after 3 days.
                   </Text>
                 </View>
               }
               renderItem={({ item }) => {
-                if (item.type === "divider") return <DateDivider label={item.label} />;
-                return <Bubble msg={item.msg} isMe={item.msg.senderId === userId} />;
+                if (item.type === "divider")
+                  return <DateDivider label={item.label} />;
+                return (
+                  <Bubble msg={item.msg} isMe={item.msg.senderId === userId} />
+                );
               }}
             />
           )}
 
-          <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 10, paddingHorizontal: 16, paddingVertical: 12, paddingBottom: Platform.OS === "ios" ? 16 : 12, backgroundColor: "#FFFFFF", borderTopWidth: 0.5, borderTopColor: "#D8F3DC" }}>
-            <View style={{ flex: 1, borderWidth: 1.5, borderColor: text ? "#52B788" : "#D8F3DC", borderRadius: 24, paddingHorizontal: 16, paddingVertical: 10, backgroundColor: "#F0FAF4" }}>
-              <TextInput value={text} onChangeText={setText} placeholder="Type a message..." placeholderTextColor="#B7E4C7" multiline style={{ color: "#1B4332", fontSize: 15, lineHeight: 22, padding: 0 }} />
+          {/* Input bar */}
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "flex-end",
+              gap: 10,
+              paddingHorizontal: 16,
+              paddingVertical: 12,
+              paddingBottom: Platform.OS === "ios" ? 16 : 12,
+              backgroundColor: "#FFFFFF",
+              borderTopWidth: 0.5,
+              borderTopColor: "#D8F3DC",
+            }}
+          >
+            <View
+              style={{
+                flex: 1,
+                borderWidth: 1.5,
+                borderColor: text ? "#52B788" : "#D8F3DC",
+                borderRadius: 24,
+                paddingHorizontal: 16,
+                paddingVertical: 10,
+                backgroundColor: "#F0FAF4",
+                maxHeight: 120,
+              }}
+            >
+              <TextInput
+                ref={inputRef}
+                value={text}
+                onChangeText={setText}
+                placeholder="Type a message…"
+                placeholderTextColor="#B7E4C7"
+                multiline
+                style={{
+                  color: "#1B4332",
+                  fontSize: 15,
+                  lineHeight: 22,
+                  padding: 0,
+                  maxHeight: 100,
+                }}
+                onSubmitEditing={handleSend}
+                blurOnSubmit={false}
+              />
             </View>
-            <TouchableOpacity onPress={handleSend} disabled={!text.trim() || sending} style={{ width: 46, height: 46, borderRadius: 23, backgroundColor: text.trim() && !sending ? "#1B4332" : "#D8F3DC", alignItems: "center", justifyContent: "center" }}>
-              {sending ? <ActivityIndicator size="small" color="#52B788" /> : <Ionicons name="send" size={20} color={text.trim() ? "#D8F3DC" : "#95D5B2"} />}
+            <TouchableOpacity
+              onPress={handleSend}
+              disabled={!text.trim() || sending}
+              style={{
+                width: 46,
+                height: 46,
+                borderRadius: 23,
+                backgroundColor:
+                  text.trim() && !sending ? "#1B4332" : "#D8F3DC",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              {sending ? (
+                <ActivityIndicator size="small" color="#52B788" />
+              ) : (
+                <Ionicons
+                  name="send"
+                  size={20}
+                  color={text.trim() ? "#D8F3DC" : "#95D5B2"}
+                />
+              )}
             </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>

@@ -1,3 +1,4 @@
+import re
 import secrets
 import cloudinary
 import cloudinary.uploader
@@ -23,6 +24,7 @@ from app.models.product import Product
 from app.models.order import Order
 # Ensure UserOutWithStats is defined in your schemas.py
 from app.schemas.schemas import UserOutWithStats 
+from sqlalchemy import or_
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 pwd_ctx = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
@@ -77,38 +79,53 @@ async def signup(
         user_id=user.id,
     )
 
+
 @router.post("/login", response_model=TokenResponse)
 def login(body: LoginRequest, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == body.email).first()
+    # 1. Clean the input
+    raw_input = body.identity.strip()
 
-    # DEBUG LOGS
+    # 2. Normalize phone: strip spaces, dashes, parentheses
+    #    e.g. "+237 6-56-82(20)01" → "+237656822001"
+    clean_phone_input = re.sub(r"[\s\-\(\)]", "", raw_input)
+
+    # 3. Query by email OR phone (both raw and normalized)
+    user = db.query(User).filter(
+        or_(
+            User.email == raw_input,
+            User.phone == raw_input,
+            User.phone == clean_phone_input,
+        )
+    ).first()
+
     if not user:
-        print(f"DEBUG: No user found with email {body.email}")
-        raise HTTPException(status_code=401, detail="Invalid email or password")
-    
-    password_match = pwd_ctx.verify(body.password, user.hashed_password)
-    if not password_match:
-        print(f"DEBUG: Password verification failed for {body.email}")
-        raise HTTPException(status_code=401, detail="Invalid email or password")
+        print(f"DEBUG: No user found — raw='{raw_input}' | phone='{clean_phone_input}'")
+        raise HTTPException(status_code=401, detail="Invalid email/phone or password")
 
+    # 4. Verify password
+    if not pwd_ctx.verify(body.password, user.hashed_password):
+        print(f"DEBUG: Password mismatch for '{raw_input}'")
+        raise HTTPException(status_code=401, detail="Invalid email/phone or password")
+
+    # 5. Generate tokens
     access  = create_access_token({"sub": user.id, "role": user.role})
     refresh = create_refresh_token({"sub": user.id})
 
-    rt = RefreshToken(
+    # 6. Persist refresh token
+    db.add(RefreshToken(
         token=refresh,
         user_id=user.id,
         expires_at=utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
-    )
-    db.add(rt)
+    ))
     db.commit()
 
+    # 7. Role always comes from DB — never trust the client
     return TokenResponse(
         access_token=access,
         refresh_token=refresh,
-        role=user.role, 
+        role=user.role,
         user_id=user.id,
     )
-
 #  Refresh Token 
 @router.post("/refresh", response_model=TokenResponse)
 def refresh_token(body: RefreshRequest, db: Session = Depends(get_db)):

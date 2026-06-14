@@ -17,7 +17,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 const API_URL = Constants.expoConfig?.extra?.API_URL;
 const CATEGORIES = ["All", "Veggies", "Fruits", "Grains", "Herbs", "Roots"];
-const ITEMS_PER_PAGE = 3;
+const ITEMS_PER_PAGE = 5; // Balanced chunk size for pagination
 
 export default function MarketplaceScreen() {
   const router = useRouter();
@@ -62,11 +62,15 @@ export default function MarketplaceScreen() {
     });
   }, [search, activeCategory, products]);
 
-  // Pagination Slice
-  const paginatedData = useMemo(() => {
+  // Determine if we have enough total matches to activate pagination
+  const shouldPaginate = filtered.length >= 10;
+
+  // Pagination Slice or Full List depending on threshold rule
+  const displayedData = useMemo(() => {
+    if (!shouldPaginate) return filtered;
     const start = (currentPage - 1) * ITEMS_PER_PAGE;
     return filtered.slice(start, start + ITEMS_PER_PAGE);
-  }, [filtered, currentPage]);
+  }, [filtered, currentPage, shouldPaginate]);
 
   const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE);
 
@@ -123,9 +127,10 @@ export default function MarketplaceScreen() {
           ) : (
             <>
               <FlatList
-                data={paginatedData}
+                data={displayedData}
                 keyExtractor={(item) => item.id.toString()}
                 contentContainerStyle={{ paddingBottom: 20 }}
+                showsVerticalScrollIndicator={false}
                 refreshControl={
                   <RefreshControl
                     refreshing={refreshing}
@@ -142,7 +147,8 @@ export default function MarketplaceScreen() {
                 }
               />
 
-              {totalPages > 1 && (
+              {/* Pagination controls only display if threshold is met */}
+              {shouldPaginate && totalPages > 1 && (
                 <View className="flex-row justify-center items-center gap-6 py-6 mb-4">
                   <TouchableOpacity
                     disabled={currentPage === 1}
@@ -181,16 +187,10 @@ export default function MarketplaceScreen() {
     </View>
   );
 }
-function LargeProductCard({
-  item,
-  router,
-}: {
-  item: any;
-  router: any;
-}) {
+
+function LargeProductCard({ item, router }: { item: any; router: any }) {
   return (
     <View className="bg-white rounded-[28px] overflow-hidden mb-6 shadow-md border border-[#E9F5EF]">
-
       {/* Product Image */}
       <View className="relative">
         {item.photos?.[0] ? (
@@ -215,7 +215,6 @@ function LargeProductCard({
 
       {/* Content */}
       <View className="p-5">
-
         {/* Name & Price */}
         <View className="flex-row justify-between items-start mb-2">
           <View className="flex-1 pr-3">
@@ -235,9 +234,7 @@ function LargeProductCard({
             <Text className="text-[#2D6A4F] font-black text-lg">
               {item.price}
             </Text>
-            <Text className="text-[#52B788] text-xs text-center">
-              XAF
-            </Text>
+            <Text className="text-[#52B788] text-xs text-center">XAF</Text>
           </View>
         </View>
 
@@ -256,19 +253,12 @@ function LargeProductCard({
             onPress={() => router.push(`/product/${item.id}`)}
             className="flex-1 bg-[#1B4332] py-4 rounded-2xl items-center"
           >
-            <Text className="text-white font-bold">
-              View Details
-            </Text>
+            <Text className="text-white font-bold">View Details</Text>
           </TouchableOpacity>
 
           <MessageFarmerButton
             farmerId={item.farmer_id}
-            farmerName={
-              item.farmer_name ||
-              item.farmer?.full_name ||
-              "Farmer"
-            }
-    
+            farmerName={item.farmer_name || item.farmer?.full_name || "Farmer"}
           />
         </View>
       </View>

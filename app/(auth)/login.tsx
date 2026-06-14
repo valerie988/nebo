@@ -17,23 +17,27 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function LoginScreen() {
   const router = useRouter();
-  // Ensure 'login' is destructured from your AuthContext
   const { login } = useAuth();
 
-  const [email, setEmail] = useState("");
+  const [identity, setIdentity] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   const handleLogin = async () => {
+    if (!identity.trim() || !password) {
+      setError("Please fill in all fields");
+      return;
+    }
+
     try {
       setLoading(true);
+      setError("");
 
       const res = await authService.login({
-        email: email.trim(),
+        identity: identity.trim(), // ✅ renamed from 'email', role dropped
         password,
-        role: "customer",
       });
 
       console.log("LOGIN RESPONSE:", res);
@@ -43,6 +47,8 @@ export default function LoginScreen() {
 
         console.log("AUTH CONTEXT UPDATED");
 
+        setLoading(false); // ✅ clear spinner before navigation
+
         router.replace(
           res.role === "farmer"
             ? "/(tabs)/(farmer-tabs)/home"
@@ -50,16 +56,16 @@ export default function LoginScreen() {
         );
       }
     } catch (err: any) {
-      setLoading(false); // Make sure to stop loading
+      setLoading(false);
 
       if (err.response) {
         console.log("SERVER ERROR:", err.response.data);
         setError(err.response.data.detail || "Authentication failed");
       } else if (err.request) {
-        console.log("NETWORK ERROR (No response):", err.request);
+        console.log("NETWORK ERROR:", err.request);
         setError("Cannot connect to server. Check your internet.");
       } else {
-        console.log("REQUEST SETUP ERROR:", err.message);
+        console.log("REQUEST ERROR:", err.message);
         setError("Error: " + err.message);
       }
     }
@@ -95,28 +101,27 @@ export default function LoginScreen() {
                 </View>
               ) : null}
 
+              {/* Identity field — email or phone */}
               <View className="bg-secondary rounded-full flex-row items-center px-6 py-[18px] mb-4">
-                <Ionicons name="mail-outline" size={22} color="#1B7344" />
+                <Ionicons name="person-outline" size={22} color="#1B7344" />
                 <TextInput
                   className="flex-1 ml-[14px] text-primary font-semibold"
-                  placeholder="Email"
+                  placeholder="Email or Phone Number"
                   placeholderTextColor="#74B88A"
-                  value={email}
+                  value={identity}
                   onChangeText={(t) => {
-                    setEmail(t);
+                    setIdentity(t);
                     setError("");
                   }}
-                  keyboardType="email-address"
+                  keyboardType="default"
                   autoCapitalize="none"
+                  autoCorrect={false} // ✅ prevents autocorrect mangling phone/email
                 />
               </View>
 
+              {/* Password field */}
               <View className="bg-secondary rounded-full flex-row items-center px-6 py-[18px] mb-[10px]">
-                <Ionicons
-                  name="lock-closed-outline"
-                  size={22}
-                  color="#1B7344"
-                />
+                <Ionicons name="lock-closed-outline" size={22} color="#1B7344" />
                 <TextInput
                   className="flex-1 ml-[14px] text-primary font-semibold"
                   placeholder="Password"
@@ -127,10 +132,9 @@ export default function LoginScreen() {
                     setPassword(t);
                     setError("");
                   }}
+                  autoCorrect={false} // ✅ prevent autocorrect on password
                 />
-                <TouchableOpacity
-                  onPress={() => setShowPassword(!showPassword)}
-                >
+                <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
                   <Ionicons
                     name={showPassword ? "eye-off-outline" : "eye-outline"}
                     size={22}

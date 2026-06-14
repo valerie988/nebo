@@ -6,11 +6,17 @@ import { useFocusEffect } from "@react-navigation/native";
 import Constants from "expo-constants";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
-import { Alert, FlatList, Text, TouchableOpacity, View } from "react-native";
+import {
+  Alert,
+  Dimensions,
+  FlatList,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 const API_URL = Constants.expoConfig?.extra?.API_URL || "http://localhost:8000";
-import { Dimensions } from "react-native";
 
 const { width } = Dimensions.get("window");
 const scale = (size: number) => (width / 375) * size;
@@ -394,21 +400,22 @@ export default function ChatListScreen() {
               <ConvoRow
                 item={item}
                 onLongPress={() => confirmDelete(item)}
-                onPress={() =>
+                onPress={() => {
+                  const recipientId =
+                    item.participantId ||
+                    (item as any).other_id ||
+                    (item as any).userId;
                   router.push({
-                    pathname:
-                      user?.role === "farmer"
-                        ? "/(tabs)/(farmer-tabs)/chat/[id]"
-                        : "/(tabs)/(customer-tabs)/chat/[id]",
+                    pathname: "./chat/[id]",
                     params: {
                       id: item.id,
                       participantName: item.participantName,
-                      participantId: item.participantId,
+                      participantId: recipientId,
                       participantRole: item.participantRole,
                       participantPhone: item.participantPhone || "",
                     },
-                  })
-                }
+                  });
+                }}
               />
             )}
           />

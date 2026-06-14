@@ -73,9 +73,8 @@ export default function HomeScreen() {
   const [userProfile, setUserProfile] = useState<any>(null);
 
   const isFarmer = role === "farmer";
-
   // ───────────────────────────────
-  // FETCH BACKEND DATA (RECOMMENDATIONS)
+  // FETCH BACKEND DATA (STRICT OWNER ISOLATION)
   // ───────────────────────────────
   const fetchHomeData = async () => {
     try {
@@ -84,50 +83,71 @@ export default function HomeScreen() {
         (await AsyncStorage.getItem("nebo_token")) ||
         (await AsyncStorage.getItem("token"));
 
-      const headers: any = token
-        ? { Authorization: `Bearer ${token}` }
-        : {};
+      const headers: any = token ? { Authorization: `Bearer ${token}` } : {};
 
-      // ── USER PROFILE (UNCHANGED UI SUPPORT)
+      // 1. FETCH USER PROFILE FIRST (Needed to get your specific account ID)
+      let currentUserId = null;
       try {
         const userRes = await fetch(`${API_URL}/api/auth/me`, { headers });
         if (userRes.ok) {
-          setUserProfile(await userRes.json());
+          const profile = await userRes.json();
+          setUserProfile(profile);
+          currentUserId = profile.id; // Store your profile ID
         }
-      } catch {}
-
-      // ── PRODUCTS (RECOMMENDATIONS BACKEND)
-      try {
-        const prodRes = await fetch(
-          `${API_URL}/api/recommendations/products?limit=10`,
-          { headers }
-        );
-
-        if (prodRes.ok) {
-          setProducts(await prodRes.json());
-        } else {
-          const fallback = await fetch(`${API_URL}/api/products/my`, {
-            headers,
-          });
-
-          if (fallback.ok) {
-            setProducts(await fallback.json());
-          }
-        }
-      } catch {
-        try {
-          const fallback = await fetch(`${API_URL}/api/products/my`, {
-            headers,
-          });
-          if (fallback.ok) setProducts(await fallback.json());
-        } catch {}
+      } catch (err) {
+        console.error("Profile retrieval error:", err);
       }
 
-      // ── FARMERS (RECOMMENDATIONS BACKEND)
+      // 2. FETCH PRODUCTS (Properly filtered to your own items)
+      try {
+        let prodEndpoint = `${API_URL}/api/recommendations/products?limit=10`;
+
+        if (isFarmer) {
+          // If your backend supports a specific /my route, we use that.
+          // Otherwise, we append your farmer/user ID as a filter parameter.
+          prodEndpoint = currentUserId
+            ? `${API_URL}/api/products?farmer_id=${currentUserId}`
+            : `${API_URL}/api/products`;
+        }
+
+        const prodRes = await fetch(prodEndpoint, { headers });
+
+        if (prodRes.ok) {
+          const resData = await prodRes.json();
+          const parsedProducts = Array.isArray(resData)
+            ? resData
+            : resData.products || [];
+
+          if (isFarmer) {
+            // Hard client-side structural validation safeguard:
+            // In case the backend ignores the query parameter, filter manually by your ID or account role context
+            setProducts(
+              parsedProducts.filter(
+                (p: any) =>
+                  p.farmer_id === currentUserId ||
+                  p.farmer?.id === currentUserId ||
+                  p.user_id === currentUserId,
+              ),
+            );
+          } else {
+            setProducts(parsedProducts);
+          }
+        } else if (!isFarmer) {
+          const fallback = await fetch(`${API_URL}/api/products`, { headers });
+          if (fallback.ok) {
+            const fbData = await fallback.json();
+            setProducts(Array.isArray(fbData) ? fbData : fbData.products || []);
+          }
+        }
+      } catch (err) {
+        console.error("Products engine exception:", err);
+      }
+
+      // 3. FETCH FARMERS (UNCHANGED)
       try {
         const farmerRes = await fetch(
           `${API_URL}/api/recommendations/farmers?limit=6`,
-          { headers }
+          { headers },
         );
 
         if (farmerRes.ok) {
@@ -148,7 +168,6 @@ export default function HomeScreen() {
           const fallback = await fetch(`${API_URL}/api/users?role=farmer`, {
             headers,
           });
-
           if (fallback.ok) setFarmers(await fallback.json());
           else setFarmers(STATIC_FARMERS);
         } catch {
@@ -162,7 +181,6 @@ export default function HomeScreen() {
       setRefreshing(false);
     }
   };
-
   useEffect(() => {
     fetchHomeData();
   }, [role]);
@@ -171,6 +189,20 @@ export default function HomeScreen() {
     setRefreshing(true);
     fetchHomeData();
   }, []);
+
+  // Filter local state based on text search and category tabs setup
+  const displayedProducts = products.filter((item) => {
+    const matchesSearch = item.name
+      ?.toLowerCase()
+      .includes(search.toLowerCase());
+    if (activeCategory === "1") return matchesSearch;
+
+    const catLabel = CATEGORIES.find(
+      (c) => c.id === activeCategory,
+    )?.label?.toLowerCase();
+    const itemCat = item.category?.toLowerCase();
+    return matchesSearch && itemCat === catLabel;
+  });
 
   const hour = new Date().getHours();
   const greeting =
@@ -203,9 +235,11 @@ export default function HomeScreen() {
               onPress={() => router.push("/profile")}
               className="w-11 h-11 rounded-full bg-[#D8F3DC] items-center justify-center border border-[#B7E4C7] overflow-hidden"
             >
-              {userProfile?.avatar_url ? (
+              {userProfile?.avatar_url || userProfile?.profile_pic ? (
                 <Image
-                  source={{ uri: userProfile.avatar_url }}
+                  source={{
+                    uri: userProfile.avatar_url || userProfile.profile_pic,
+                  }}
                   className="w-full h-full"
                 />
               ) : (
@@ -246,7 +280,7 @@ export default function HomeScreen() {
                     router.push(
                       isFarmer
                         ? "/(tabs)/(farmer-tabs)/addProduct"
-                        : "/marketplace"
+                        : "/marketplace",
                     )
                   }
                   className="bg-white rounded-full px-4 py-2.5 self-start mt-4 shadow-sm"
@@ -269,12 +303,14 @@ export default function HomeScreen() {
           {/* CATEGORY (UNCHANGED UI) */}
           <View className="mb-5">
             <Text className="text-[#1B4332] font-black text-[15px] px-5 mb-3">
-              {isFarmer
-                ? "Filter Inventory By Category"
-                : "Categories"}
+              {isFarmer ? "Filter Inventory By Category" : "Categories"}
             </Text>
 
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ paddingHorizontal: 20 }}
+            >
               {CATEGORIES.map((cat) => {
                 const isActive = activeCategory === cat.id;
 
@@ -282,10 +318,16 @@ export default function HomeScreen() {
                   <TouchableOpacity
                     key={cat.id}
                     onPress={() => setActiveCategory(cat.id)}
-                    className="flex-row items-center rounded-full px-4 py-2.5 mr-2.5 bg-[#F0FAF4] border border-[#D8F3DC]"
+                    className={`flex-row items-center rounded-full px-4 py-2.5 mr-2.5 border ${
+                      isActive
+                        ? "bg-[#2D6A4F] border-[#2D6A4F]"
+                        : "bg-[#F0FAF4] border-[#D8F3DC]"
+                    }`}
                   >
-                    <Text>{cat.emoji}</Text>
-                    <Text className="text-[#2D6A4F] font-bold ml-1.5">
+                    {cat.emoji ? <Text>{cat.emoji}</Text> : null}
+                    <Text
+                      className={`font-bold ${isActive ? "text-white" : "text-[#2D6A4F]"} ${cat.emoji ? "ml-1.5" : ""}`}
+                    >
                       {cat.label}
                     </Text>
                   </TouchableOpacity>
@@ -294,7 +336,7 @@ export default function HomeScreen() {
             </ScrollView>
           </View>
 
-          {/* PRODUCTS (BACKEND CONNECTED) */}
+          {/* PRODUCTS (BACKEND ROUTING RESTORATION) */}
           <View className="mb-6">
             <Text className="text-[#1B4332] font-black text-[15px] px-5 mb-3">
               {isFarmer ? "Your Active Items" : "Featured produce"}
@@ -302,53 +344,69 @@ export default function HomeScreen() {
 
             {loading ? (
               <ActivityIndicator color="#1B4332" />
+            ) : displayedProducts.length === 0 ? (
+              <View className="mx-5 bg-[#F0FAF4] border border-dashed border-[#D8F3DC] rounded-2xl p-6 items-center">
+                <Text className="text-[#2D6A4F] text-xs font-bold text-center">
+                  {isFarmer
+                    ? "No items listed in this category.\nTap 'Add Product +' to create one!"
+                    : "No produce matches your search."}
+                </Text>
+              </View>
             ) : (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                {products.map((item) => {
-                  const image =
-                    item?.image || item?.photos?.[0] || null;
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ paddingHorizontal: 20 }}
+              >
+                {displayedProducts.map((item) => {
+                  const image = item?.image || item?.photos?.[0] || null;
 
                   return (
-                    <View
+                    <TouchableOpacity
                       key={item.id}
-                      className="w-40 rounded-3xl p-3 mr-3 bg-[#F0FAF4] border border-[#D8F3DC]"
+                      activeOpacity={0.9}
+                      onPress={() => router.push(`/product/${item.id}`)}
+                      className="w-40 rounded-3xl p-3 mr-3 bg-white border border-[#D8F3DC]"
                     >
-                      <View className="h-[90px] bg-white rounded-2xl mb-2 overflow-hidden">
+                      <View className="h-[90px] bg-[#F0FAF4] rounded-2xl mb-2 overflow-hidden items-center justify-center">
                         {image ? (
                           <Image
                             source={{ uri: image }}
                             className="w-full h-full"
+                            resizeMode="cover"
                           />
                         ) : (
-                          <Feather
-                            name="package"
-                            size={28}
-                            color="#52B788"
-                          />
+                          <Feather name="package" size={24} color="#52B788" />
                         )}
                       </View>
 
-                      <Text className="text-[#1B4332] font-black">
+                      <Text
+                        className="text-[#1B4332] font-black text-sm"
+                        numberOfLines={1}
+                      >
                         {item.name}
                       </Text>
 
-                      <Text className="text-[#52B788] text-xs">
+                      <Text
+                        className="text-[#52B788] text-xs font-semibold mt-0.5"
+                        numberOfLines={1}
+                      >
                         {isFarmer
-                          ? `${item.quantity || 0} ${item.unit || "units"}`
-                          : item.farmer?.full_name || "Farmer"}
+                          ? `${item.quantity || 0} ${item.unit || "kg"}`
+                          : item.farmer?.full_name || "Verified Farmer"}
                       </Text>
 
-                      <Text className="text-[#2D6A4F] font-black mt-1">
-                        {item.price} XAF
+                      <Text className="text-[#2D6A4F] font-black mt-2 text-[13px]">
+                        {item.price?.toLocaleString()} XAF
                       </Text>
-                    </View>
+                    </TouchableOpacity>
                   );
                 })}
               </ScrollView>
             )}
           </View>
 
-          {/* FARMERS (BACKEND CONNECTED) */}
+          {/* FARMERS (UNCHANGED UI) */}
           <View className="px-5">
             <Text className="text-[#1B4332] font-black text-[15px] mb-3">
               {isFarmer ? "Top Region Producers" : "Nearby farmers"}
@@ -368,7 +426,7 @@ export default function HomeScreen() {
                     {farmer.full_name || farmer.name}
                   </Text>
                   <Text className="text-[#95D5B2] text-xs">
-                    {farmer.location}
+                    {farmer.location || "Cameroon"}
                   </Text>
                 </View>
               </View>

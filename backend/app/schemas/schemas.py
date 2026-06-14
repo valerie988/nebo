@@ -57,9 +57,8 @@ class SignupRequest(BaseModel):
         return v
 
 class LoginRequest(BaseModel):
-    email: str
+    identity: str  
     password: str
-    role: UserRole
 
 class TokenResponse(BaseModel):
     access_token: str

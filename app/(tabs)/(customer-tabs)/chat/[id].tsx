@@ -1,1 +1,6 @@
-export { default } from "@/app/_shared/chat/ChatScreen";
+
+import { ChatScreen } from "../../../_shared/chat/ChatScreen";
+
+export default function CustomerChatRoute() {
+  return <ChatScreen />;
+}
