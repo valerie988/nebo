@@ -120,7 +120,7 @@ function Bubble({ msg, isMe }: { msg: Message; isMe: boolean }) {
                 color: msg.pending ? "#B7E4C7" : "#52B788",
               }}
             >
-              {msg.pending ? "⏳" : msg.synced ? "✓✓" : "✓"}
+              {msg.pending ? "" : msg.synced ? "✓✓" : "✓"}
             </Text>
           )}
         </View>
