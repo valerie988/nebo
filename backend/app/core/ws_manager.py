@@ -50,6 +50,16 @@ class ConnectionManager:
 
         return delivered
 
+    async def broadcast(self, data: dict) -> Dict[str, bool]:
+        """
+        Broadcasts to ALL connected users.
+        Returns a dict of user_id -> delivered status.
+        """
+        results = {}
+        for user_id in list(self.active.keys()):
+            results[user_id] = await self.send_to(user_id, data)
+        return results
+
     def is_online(self, user_id: str) -> bool:
         return bool(self.active.get(user_id))
 
