@@ -201,17 +201,17 @@ def verify_farmer(user_id: str, db: Session = Depends(get_db), admin: User = Dep
         raise HTTPException(404, "Farmer not found")
     user.is_verified = True
     db.commit()
-    
-    from ..services.notification_service import send_push
-    import asyncio
-    if user.push_token:
-        asyncio.create_task(send_push(
-            token = user.push_token,
-            title = "Account Verified!",
-            body  = "Congratulations! Your farmer account has been verified.",
-            data  = {"type": "verification", "screen": "profile"},
-        ))
-    return {"message": f"{user.full_name} verified successfully"}
+
+    # ✅ Replace with:
+    from app.services.notification_service import send_push
+    send_push(
+        db=db,
+        recipient_user_id=user.id,
+        nebo_token=user.expo_push_token,   # match your User model field name
+        title="Account Verified!",
+        body="Congratulations! Your farmer account has been verified.",
+        data={"type": "verification", "screen": "profile"},
+    )
 
 
 @admin_router.post("/users/{user_id}/badge")
@@ -371,17 +371,15 @@ def list_orders(
     return q.order_by(Order.created_at.desc()).offset(skip).limit(limit).all()
 
 
-# ── Push Messaging Engine ──
-
 @admin_router.post("/notifications/send")
-async def send_notification(
+def send_notification( 
     body:  PushRequest,
     db:    Session = Depends(get_db),
     admin: User    = Depends(require_admin),
 ):
     from app.services.notification_service import send_push
 
-    q = db.query(User).filter(User.push_token != None, User.is_banned == False)
+    q = db.query(User).filter(User.expo_push_token != None, User.is_banned == False)
     if body.target == "farmers":
         q = q.filter(User.role == "farmer")
     elif body.target == "customers":
@@ -392,19 +390,18 @@ async def send_notification(
         q = q.filter(User.role != "admin")
 
     recipients = q.all()
-    sent_count = 0
 
     for user in recipients:
-        success = await send_push(
-            token = user.push_token,
-            title = body.title,
-            body  = body.body,
-            data  = {"type": "admin_broadcast"},
+        send_push(       
+            db=db,
+            recipient_user_id=user.id,
+            nebo_token=user.expo_push_token,
+            title=body.title,
+            body=body.body,
+            data={"type": "admin_broadcast"},
         )
-        if success:
-            sent_count += 1
 
-    return {"sent_count": sent_count, "total_recipients": len(recipients)}
+    return {"sent_count": len(recipients), "total_recipients": len(recipients)}
 
 
 # ── Comprehensive Market Analytics─────
