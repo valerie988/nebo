@@ -202,16 +202,15 @@ def verify_farmer(user_id: str, db: Session = Depends(get_db), admin: User = Dep
     user.is_verified = True
     db.commit()
 
-    # ✅ Replace with:
-    from app.services.notification_service import send_push
+    from app.services.push_service import send_push
     send_push(
         db=db,
         recipient_user_id=user.id,
-        nebo_token=user.expo_push_token,   # match your User model field name
-        title="Account Verified!",
+        nebo_token=user.expo_push_token,
+        title="Account Verified! ",
         body="Congratulations! Your farmer account has been verified.",
         data={"type": "verification", "screen": "profile"},
-    )
+)
 
 
 @admin_router.post("/users/{user_id}/badge")
@@ -239,17 +238,15 @@ def badge_farmer(
         "trusted":       "Trusted",
     }
 
-    from ..services.notification_service import send_push
-    import asyncio
-    if user.push_token:
-        asyncio.create_task(send_push(
-            token = user.push_token,
-            title = "🏅 New Badge Awarded!",
-            body  = f"You've earned the {badge_labels.get(body.badge, body.badge)} badge on NeBo!",
-            data  = {"type": "badge", "badge": body.badge},
-        ))
-    return {"message": f"Badge '{body.badge}' awarded to {user.full_name}"}
-
+    from app.services.push_service import send_push
+    send_push(
+        db=db,
+        recipient_user_id=user.id,
+        nebo_token=user.expo_push_token,
+        title="🏅 New Badge Awarded!",
+        body=f"You've earned the {badge_labels.get(body.badge, body.badge)} badge on NeBo!",
+        data={"type": "badge", "badge": body.badge},
+)
 
 @admin_router.post("/users/{user_id}/ban")
 def ban_user(user_id: str, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
@@ -334,14 +331,15 @@ def flag_product(
     
     farmer = db.query(User).filter(User.id == product.farmer_id).first()
     if farmer and farmer.push_token:
-        from app.services.notification_service import send_push
-        import asyncio
-        asyncio.create_task(send_push(
-            token = farmer.push_token,
-            title = "⚠️ Product Flagged",
-            body  = f'Your product "{product.name}" has been flagged: {body.reason}',
-            data  = {"type": "product_flagged", "product_id": product_id},
-        ))
+        from app.services.push_service import send_push
+        send_push(
+            db=db,
+            recipient_user_id=farmer.id,
+            nebo_token=farmer.expo_push_token,
+            title="Product Flagged",
+            body=f'Your product "{product.name}" has been flagged: {body.reason}',
+            data={"type": "product_flagged", "product_id": product_id},
+        )
     return {"message": "Product flagged"}
 
 
@@ -370,14 +368,9 @@ def list_orders(
         q = q.filter(Order.status == status)
     return q.order_by(Order.created_at.desc()).offset(skip).limit(limit).all()
 
-
 @admin_router.post("/notifications/send")
-def send_notification( 
-    body:  PushRequest,
-    db:    Session = Depends(get_db),
-    admin: User    = Depends(require_admin),
-):
-    from app.services.notification_service import send_push
+def send_notification(...):
+    from app.services.push_service import send_push
 
     q = db.query(User).filter(User.expo_push_token != None, User.is_banned == False)
     if body.target == "farmers":
@@ -390,9 +383,8 @@ def send_notification(
         q = q.filter(User.role != "admin")
 
     recipients = q.all()
-
     for user in recipients:
-        send_push(       
+        send_push(
             db=db,
             recipient_user_id=user.id,
             nebo_token=user.expo_push_token,
@@ -400,10 +392,7 @@ def send_notification(
             body=body.body,
             data={"type": "admin_broadcast"},
         )
-
     return {"sent_count": len(recipients), "total_recipients": len(recipients)}
-
-
 # ── Comprehensive Market Analytics─────
 
 @admin_router.get("/analytics")
