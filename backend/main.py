@@ -15,6 +15,7 @@ from app.routers.admin import admin_router
 from app.routers.orders import router as orders_router
 from app.routers.chat import chat_router
 from app.routers.recommendations import recommendations_router
+from app.routers.ai import ai_router
 
 app = FastAPI(
     title="NEBO API",
@@ -95,6 +96,7 @@ app.include_router(orders_router, prefix="/api/orders", tags=["orders"])
 app.include_router(notification_router, prefix="/api")
 app.include_router(chat_router, prefix="/api")
 app.include_router(recommendations_router, prefix="/api")
+app.include_router(ai_router, prefix="/api")
 
 @app.get("/health", tags=["health"])
 def health():

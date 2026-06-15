@@ -30,7 +30,6 @@ const CATEGORIES = [
   "Other",
 ];
 
-// Pulling your dynamic base URL from app.config.js
 const BASE_URL =
   Constants.expoConfig?.extra?.API_URL || "http://192.168.11.104:8000";
 
@@ -40,6 +39,7 @@ export default function AddProductScreen() {
   const [showDropdown, setShowDropdown] = useState(false);
   const [draftSaved, setDraftSaved] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
 
   // Form State
   const [image, setImage] = useState<string | null>(null);
@@ -88,9 +88,50 @@ export default function AddProductScreen() {
     setTimeout(() => setDraftSaved(false), 2000);
   };
 
+  const generateDescription = async () => {
+    if (!name.trim()) {
+      Alert.alert(
+        "Product Name Required",
+        "Please enter a product name first.",
+      );
+      return;
+    }
+
+    setAiLoading(true);
+    try {
+      const token =
+        (await AsyncStorage.getItem("nebo_token")) ||
+        (await AsyncStorage.getItem("token"));
+
+      const response = await fetch(`${BASE_URL}/api/ai/generate-description`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ name, category, location }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.description) {
+        setDescription(data.description);
+      } else {
+        Alert.alert("Error", "Could not generate description. Try again.");
+      }
+    } catch (error) {
+      Alert.alert(
+        "Error",
+        "Failed to connect. Check your internet connection.",
+      );
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
-     mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [4, 3],
       quality: 0.7,
@@ -99,7 +140,6 @@ export default function AddProductScreen() {
   };
 
   const handleSubmit = async () => {
-    // 1. Validation
     if (!name || !category || !price || !quantity || !location) {
       Alert.alert("Required Fields", "Please fill in all fields marked with *");
       return;
@@ -109,7 +149,6 @@ export default function AddProductScreen() {
     let finalImageUrl = "";
 
     try {
-      // 2. Upload to Cloudinary First (If an image exists)
       if (image) {
         console.log("☁️ Starting Cloudinary upload...");
 
@@ -123,15 +162,12 @@ export default function AddProductScreen() {
           name: filename,
           type: type,
         } as any);
-        const CLOUD_NAME = Constants.expoConfig?.extra?.CLOUDINARY_CLOUD_NAME;
 
+        const CLOUD_NAME = Constants.expoConfig?.extra?.CLOUDINARY_CLOUD_NAME;
         const UPLOAD_PRESET =
           Constants.expoConfig?.extra?.CLOUDINARY_UPLOAD_PRESET;
+
         if (!CLOUD_NAME || !UPLOAD_PRESET) {
-          console.error("❌ Environment variables missing!", {
-            CLOUD_NAME,
-            UPLOAD_PRESET,
-          });
           throw new Error(
             "Cloudinary configuration missing. Please check your .env file.",
           );
@@ -139,16 +175,12 @@ export default function AddProductScreen() {
 
         cloudinaryFormData.append("upload_preset", UPLOAD_PRESET);
 
-        console.log(`☁️ Uploading to Cloudinary cloud: ${CLOUD_NAME}`);
-
         const cloudinaryResponse = await fetch(
           `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`,
           {
             method: "POST",
             body: cloudinaryFormData,
-            headers: {
-              Accept: "application/json",
-            },
+            headers: { Accept: "application/json" },
           },
         );
 
@@ -164,12 +196,10 @@ export default function AddProductScreen() {
         console.log("✅ Cloudinary Upload Success! URL:", finalImageUrl);
       }
 
-      // 3. Fetch Auth Token
       const token =
         (await AsyncStorage.getItem("nebo_token")) ||
         (await AsyncStorage.getItem("token"));
 
-      // 4. Send clean JSON data to FastAPI backend
       const payload = {
         name,
         category,
@@ -181,12 +211,6 @@ export default function AddProductScreen() {
         image: finalImageUrl,
       };
 
-      console.log(
-        `📡 Sending product payload to: ${BASE_URL}/api/products`,
-        payload,
-      );
-
-      // ✅ FIXED: Changed from API_URL to BASE_URL
       const response = await fetch(`${BASE_URL}/api/products`, {
         method: "POST",
         headers: {
@@ -255,7 +279,7 @@ export default function AddProductScreen() {
             </Text>
             <TouchableOpacity
               onPress={pickImage}
-              className="w-full h-44 border-2 border-dashed border-[#B7E4C7] rounded-[30px] items-center justify-center bg-white overflow-hidden "
+              className="w-full h-44 border-2 border-dashed border-[#B7E4C7] rounded-[30px] items-center justify-center bg-white overflow-hidden"
             >
               {image ? (
                 <Image source={{ uri: image }} className="w-full h-full" />
@@ -283,14 +307,58 @@ export default function AddProductScreen() {
                 />
               </View>
 
+              {/* Description with AI button */}
               <View className="mb-5">
-                <Text className="text-[#1B4332] font-bold text-sm mb-1 ml-1">
-                  Description
-                </Text>
+                <View className="flex-row items-center justify-between mb-1 ml-1">
+                  <Text className="text-[#1B4332] font-bold text-sm">
+                    Description
+                  </Text>
+                  <TouchableOpacity
+                    onPress={generateDescription}
+                    disabled={aiLoading}
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      backgroundColor: aiLoading ? "#B7E4C7" : "#1B7344",
+                      paddingHorizontal: 10,
+                      paddingVertical: 5,
+                      borderRadius: 99,
+                      gap: 4,
+                    }}
+                  >
+                    {aiLoading ? (
+                      <>
+                        <ActivityIndicator size="small" color="#fff" />
+                        <Text
+                          style={{
+                            color: "#fff",
+                            fontSize: 11,
+                            fontWeight: "700",
+                          }}
+                        >
+                          Generating...
+                        </Text>
+                      </>
+                    ) : (
+                      <>
+                        <Ionicons name="sparkles" size={12} color="#fff" />
+                        <Text
+                          style={{
+                            color: "#fff",
+                            fontSize: 11,
+                            fontWeight: "700",
+                          }}
+                        >
+                          AI Write
+                        </Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </View>
                 <TextInput
                   value={description}
                   onChangeText={setDescription}
-                  placeholder="Tell us about the harvest..."
+                  placeholder="Tell us about the harvest... or tap AI Write ✨"
                   multiline
                   className="w-full bg-white border border-[#D8F3DC] rounded-2xl px-5 py-4 h-24"
                   textAlignVertical="top"
