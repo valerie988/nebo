@@ -56,11 +56,9 @@ async def signup(
         is_verified=False,
     )
     db.add(user)
-    db.flush()  # get user.id before commit
+    db.flush()  
 
     db.refresh(user)
-
-    # Issue tokens immediately (user can use app but sees "verify" banner)
     access  = create_access_token({"sub": user.id, "role": user.role})
     refresh = create_refresh_token({"sub": user.id})
 
@@ -82,14 +80,9 @@ async def signup(
 
 @router.post("/login", response_model=TokenResponse)
 def login(body: LoginRequest, db: Session = Depends(get_db)):
-    # 1. Clean the input
     raw_input = body.identity.strip()
-
-    # 2. Normalize phone: strip spaces, dashes, parentheses
-    #    e.g. "+237 6-56-82(20)01" → "+237656822001"
     clean_phone_input = re.sub(r"[\s\-\(\)]", "", raw_input)
 
-    # 3. Query by email OR phone (both raw and normalized)
     user = db.query(User).filter(
         or_(
             User.email == raw_input,
@@ -111,7 +104,6 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
     access  = create_access_token({"sub": user.id, "role": user.role})
     refresh = create_refresh_token({"sub": user.id})
 
-    # 6. Persist refresh token
     db.add(RefreshToken(
         token=refresh,
         user_id=user.id,
@@ -119,7 +111,6 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
     ))
     db.commit()
 
-    # 7. Role always comes from DB — never trust the client
     return TokenResponse(
         access_token=access,
         refresh_token=refresh,
@@ -226,3 +217,29 @@ async def verify_identity(
     selfie_url = selfie_upload.get("secure_url")
 
     return {"message": "Upload successful", "id_url": id_url, "selfie_url": selfie_url}
+
+
+@router.post("/internal/seed-admin")
+def seed_admin(db: Session = Depends(get_db)):
+    existing = db.query(User).filter(User.email == "admin@nebo.com").first()
+    if existing:
+        # Just promote to admin if exists
+        existing.role = "admin"
+        existing.is_active = True
+        existing.is_verified = True
+        db.commit()
+        return {"message": "Existing user promoted to admin"}
+
+    # Create fresh admin user
+    user = User(
+        full_name="NeBo Admin",
+        email="admin@nebo.com",
+        hashed_password=pwd_ctx.hash("Admin@2026"),
+        role="admin",
+        is_active=True,
+        is_verified=True,
+        is_banned=False,
+    )
+    db.add(user)
+    db.commit()
+    return {"message": "Admin created", "email": "admin@nebo.com", "password": "Admin@2026"}
