@@ -206,7 +206,7 @@ def verify_farmer(user_id: str, db: Session = Depends(get_db), admin: User = Dep
     send_push(
         db=db,
         recipient_user_id=user.id,
-        nebo_token=user.expo_push_token,
+        nebo_token=user.push_token,
         title="Account Verified! ",
         body="Congratulations! Your farmer account has been verified.",
         data={"type": "verification", "screen": "profile"},
@@ -242,8 +242,8 @@ def badge_farmer(
     send_push(
         db=db,
         recipient_user_id=user.id,
-        nebo_token=user.expo_push_token,
-        title="🏅 New Badge Awarded!",
+        nebo_token=user.push_token,
+        title="New Badge Awarded!",
         body=f"You've earned the {badge_labels.get(body.badge, body.badge)} badge on NeBo!",
         data={"type": "badge", "badge": body.badge},
 )
@@ -335,7 +335,7 @@ def flag_product(
         send_push(
             db=db,
             recipient_user_id=farmer.id,
-            nebo_token=farmer.expo_push_token,
+            nebo_token=farmer.push_token,
             title="Product Flagged",
             body=f'Your product "{product.name}" has been flagged: {body.reason}',
             data={"type": "product_flagged", "product_id": product_id},
@@ -376,7 +376,7 @@ def send_notification(
 ):
     from app.services.push_service import send_push
 
-    q = db.query(User).filter(User.expo_push_token != None, User.is_banned == False)
+    q = db.query(User).filter(User.push_token != None, User.is_banned == False)
     if body.target == "farmers":
         q = q.filter(User.role == "farmer")
     elif body.target == "customers":
@@ -391,7 +391,7 @@ def send_notification(
         send_push(
             db=db,
             recipient_user_id=user.id,
-            nebo_token=user.expo_push_token,
+            nebo_token=user.push_token,
             title=body.title,
             body=body.body,
             data={"type": "admin_broadcast"},

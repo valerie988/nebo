@@ -73,7 +73,7 @@ def send_push(
         logger.warning(f"Token expired for user {recipient_user_id}. Clearing.")
         user = db.query(User).filter(User.id == recipient_user_id).first()
         if user:
-            user.expo_push_token = None
+            user.push_token = None
             db.commit()
 
     except PushServerError as e:
@@ -101,7 +101,7 @@ def notify_farmer_new_order(
     send_push(
         db=db,
         recipient_user_id=farmer.id,
-        nebo_token=farmer.expo_push_token,
+        nebo_token=farmer.push_token,
         title="New Order! 🛒",
         body=f"{customer_name} ordered {product_name}",
         data={
@@ -121,18 +121,18 @@ def notify_customer_status_update(
 ) -> None:
     """Notify a customer that their order status changed."""
     STATUS_LABELS = {
-        "confirmed":  "confirmed ✅",
-        "in_transit": "in transit 🚚",
-        "delivered":  "delivered 🎉",
-        "cancelled":  "cancelled ❌",
+        "confirmed":  "confirmed ",
+        "in_transit": "in transit ",
+        "delivered":  "delivered ",
+        "cancelled":  "cancelled ",
     }
     label = STATUS_LABELS.get(new_status, new_status)
 
     send_push(
         db=db,
         recipient_user_id=customer.id,
-        nebo_token=customer.expo_push_token,
-        title="Order Update 📦",
+        nebo_token=customer.push_token,
+        title="Order Update ",
         body=f"Your order for {product_name} is now {label}",
         data={
             "type": "order_status",
