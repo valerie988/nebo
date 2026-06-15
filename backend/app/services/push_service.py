@@ -33,13 +33,10 @@ def send_push(
 
     # ── 1. Persist to DB (inbox) ──────────────────────────────────────────
     notif = Notification(
-        id=str(uuid.uuid4()),
         user_id=recipient_user_id,
         title=title,
-        body=body,
-        data=data,
+        message=body,
         is_read=False,
-        created_at=datetime.datetime.utcnow(),
     )
     db.add(notif)
     db.commit()
@@ -58,8 +55,7 @@ def send_push(
             PushMessage(
                 to=nebo_token,
                 title=title,
-                body=body,
-                data=data,
+                message=body,
                 sound="default",
                 priority="high",
                 channel_id="default",       # Android 8+ channel
