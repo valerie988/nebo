@@ -202,7 +202,7 @@ def verify_farmer(user_id: str, db: Session = Depends(get_db), admin: User = Dep
     user.is_verified = True
     db.commit()
     
-    from app.services.notification_service import send_push
+    from ..services.notification_service import send_push
     import asyncio
     if user.push_token:
         asyncio.create_task(send_push(
@@ -239,7 +239,7 @@ def badge_farmer(
         "trusted":       "Trusted",
     }
 
-    from app.services.notification_service import send_push
+    from ..services.notification_service import send_push
     import asyncio
     if user.push_token:
         asyncio.create_task(send_push(
