@@ -8,8 +8,6 @@ from pydantic import BaseModel
 from app.core.database import get_db
 from app.core.security import get_current_user
 
-# ── Production Model Imports ──────────────────────────────────────────────────
-# Using your real, linked backend models instead of the temporary stubs
 from app.models.user import User          
 from app.models.product import Product
 from app.models.order import Order  # Using your newly fixed Order model!
@@ -21,7 +19,7 @@ def utcnow():
     return datetime.now(timezone.utc)
 
 
-# ── Admin Guard Middleware ───────────────────────────────────────────────────
+# ── Admin Guard Middleware 
 
 def require_admin(current_user: User = Depends(get_current_user)) -> User:
     if current_user.role != "admin":
@@ -29,7 +27,7 @@ def require_admin(current_user: User = Depends(get_current_user)) -> User:
     return current_user
 
 
-# ── Pydantic Response / Request Schemas ───────────────────────────────────────
+# ── Pydantic Response / Request Schemas
 
 class UserAdminOut(BaseModel):
     id:          str
@@ -96,7 +94,7 @@ class PushRequest(BaseModel):
     user_id: Optional[str] = None  
 
 
-# ── Dashboard KPIs & Trends ───────────────────────────────────────────────────
+# ── Dashboard KPIs & Trends 
 
 @admin_router.get("/stats")
 def get_stats(
@@ -163,7 +161,7 @@ def get_stats(
     }
 
 
-# ── CRM & User Accounts Management ────────────────────────────────────────────
+# ── CRM & User Accounts Management─────
 
 @admin_router.get("/users", response_model=List[UserAdminOut])
 def list_users(
@@ -356,7 +354,7 @@ def delete_product(product_id: str, db: Session = Depends(get_db), admin: User =
     db.commit()
 
 
-# ── Global Order Ledger ───────────────────────────────────────────────────────
+# ── Global Order Ledger ────
 
 @admin_router.get("/orders", response_model=List[OrderAdminOut])
 def list_orders(
@@ -373,7 +371,7 @@ def list_orders(
     return q.order_by(Order.created_at.desc()).offset(skip).limit(limit).all()
 
 
-# ── Push Messaging Engine ─────────────────────────────────────────────────────
+# ── Push Messaging Engine ──
 
 @admin_router.post("/notifications/send")
 async def send_notification(
@@ -409,7 +407,7 @@ async def send_notification(
     return {"sent_count": sent_count, "total_recipients": len(recipients)}
 
 
-# ── Comprehensive Market Analytics ────────────────────────────────────────────
+# ── Comprehensive Market Analytics─────
 
 @admin_router.get("/analytics")
 def get_analytics(
