@@ -401,12 +401,12 @@ def send_notification(
 
 @admin_router.get("/analytics")
 def get_analytics(
-    range: str    = Query("7d"),
+    time_range: str = Query("7d"),
     db:    Session = Depends(get_db),
     admin: User    = Depends(require_admin),
 ):
     days_map = {"7d": 7, "30d": 30, "90d": 90}
-    days     = days_map.get(range, 7)
+    days     = days_map.get(time_range, 7)
     now      = datetime.now(timezone.utc)
 
     revenue_data = []
