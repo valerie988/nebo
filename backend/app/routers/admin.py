@@ -369,7 +369,11 @@ def list_orders(
     return q.order_by(Order.created_at.desc()).offset(skip).limit(limit).all()
 
 @admin_router.post("/notifications/send")
-def send_notification(...):
+def send_notification(
+    body:  PushRequest,
+    db:    Session = Depends(get_db),
+    admin: User    = Depends(require_admin),
+):
     from app.services.push_service import send_push
 
     q = db.query(User).filter(User.expo_push_token != None, User.is_banned == False)
