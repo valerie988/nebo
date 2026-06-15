@@ -67,7 +67,7 @@ def _product_out(p: Product, label: str = None) -> dict:
         "unit":        p.unit,
         "quantity":    p.quantity,
         "location":    p.location,
-        "image":       p.image,
+        "image":       p.photos[0] if p.photos else None,
         "in_stock":    p.in_stock,
         "created_at":  p.created_at.isoformat() if p.created_at else None,
         "farmer_id":   p.farmer_id,
@@ -407,7 +407,7 @@ def view_history(
         return [{
             "product_id": r.product_id,
             "name":       r.product.name  if r.product else None,
-            "image":      r.product.image if r.product else None,
+            "image":      r.product.photos[0] if r.product and r.product.photos else None,
             "price":      r.product.price if r.product else None,
             "viewed_at":  r.viewed_at.isoformat(),
         } for r in rows if r.product]
