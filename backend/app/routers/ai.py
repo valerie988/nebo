@@ -90,3 +90,12 @@ Return only the description text, nothing else."""
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail="Received an unparseable response payload from the AI service."
             )
+
+@ai_router.get("/models")
+async def list_models(current_user: User = Depends(get_current_user)):
+    async with httpx.AsyncClient() as client:
+        response = await client.get(
+            f"https://generativelanguage.googleapis.com/v1beta/models?key={GEMINI_API_KEY}",
+            timeout=10.0,
+        )
+        return response.json()

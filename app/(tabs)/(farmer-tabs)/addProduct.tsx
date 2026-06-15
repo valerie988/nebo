@@ -224,7 +224,7 @@ export default function AddProductScreen() {
       const result = await response.json();
 
       if (response.ok) {
-        Alert.alert("Success! 🌿", "Your product has been listed.");
+        Alert.alert("Success!", "Your product has been listed.");
         await AsyncStorage.removeItem(DRAFT_KEY);
         router.back();
       } else {
@@ -358,7 +358,7 @@ export default function AddProductScreen() {
                 <TextInput
                   value={description}
                   onChangeText={setDescription}
-                  placeholder="Tell us about the harvest... or tap AI Write ✨"
+                  placeholder="Tell us about the harvest... or tap AI Write"
                   multiline
                   className="w-full bg-white border border-[#D8F3DC] rounded-2xl px-5 py-4 h-24"
                   textAlignVertical="top"
