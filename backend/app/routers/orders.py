@@ -14,9 +14,6 @@ from app.models.notification import Notification
 
 router = APIRouter()
 
-# -------------------------
-# CUSTOMER ORDERS
-# -------------------------
 @router.get("", response_model=List[OrderOut])
 async def get_orders(db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     return db.query(Order).options(
@@ -28,9 +25,6 @@ async def get_orders(db: Session = Depends(get_db), current_user=Depends(get_cur
     ).all()
 
 
-# -------------------------
-# FARMER ORDERS
-# -------------------------
 @router.get("/farmer", response_model=List[OrderOut])
 async def get_farmer_orders(
     db: Session = Depends(get_db),
@@ -42,9 +36,6 @@ async def get_farmer_orders(
     ).filter(Order.farmer_id == str(current_farmer.id)).all()
 
 
-# -------------------------
-# ORDER DETAIL
-# -------------------------
 @router.get("/{order_id}", response_model=OrderOut)
 async def get_order_detail(order_id: str, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     order = db.query(Order).options(
@@ -57,9 +48,6 @@ async def get_order_detail(order_id: str, db: Session = Depends(get_db), current
     return order
 
 
-# -------------------------
-# CREATE ORDER
-# -------------------------
 @router.post("/", response_model=OrderOut, status_code=status.HTTP_201_CREATED)
 async def create_order(
     payload: OrderCreate,
@@ -124,9 +112,7 @@ async def create_order(
         raise HTTPException(status_code=500, detail=f"Internal database transaction failed: {str(e)}")
 
 
-# -------------------------
 # UPDATE ORDER STATUS
-# -------------------------
 @router.patch("/{order_id}/status", response_model=OrderOut)
 async def update_order_status(
     order_id: str,
@@ -184,9 +170,7 @@ async def update_order_status(
         raise HTTPException(status_code=500, detail=f"Internal status transaction failed: {str(e)}")
 
 
-# -------------------------
 # DELETE ORDER
-# -------------------------
 @router.delete("/{order_id}")
 async def delete_order(order_id: str, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     order = db.query(Order).filter(Order.id == order_id, Order.customer_id == current_user.id).first()
@@ -198,9 +182,7 @@ async def delete_order(order_id: str, db: Session = Depends(get_db), current_use
     return {"message": "Order deleted"}
 
 
-# -------------------------
 # WEBSOCKETS
-# -------------------------
 @router.websocket("/ws/orders/{user_id}")
 async def orders_ws(websocket: WebSocket, user_id: str):
     await manager.connect(user_id, websocket)

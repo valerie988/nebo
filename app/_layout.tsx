@@ -2,6 +2,7 @@ import { AuthProvider, useAuth } from "@/components/context/AuthContext";
 import { NotificationsProvider } from "@/components/context/NotificationsContext";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Slot, useRouter, useSegments } from "expo-router";
+import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, View } from "react-native";
 import {
@@ -70,6 +71,8 @@ export default function RootLayout() {
     <AuthProvider>
       <NotificationsProvider>
         <RootLayoutNav />
+
+        <StatusBar style="dark" backgroundColor="#F8FDF9" translucent={false} />
       </NotificationsProvider>
     </AuthProvider>
   );

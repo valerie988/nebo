@@ -284,9 +284,6 @@ def _filter_popular(db, current_user, limit, offset):
     )
     return [_product_out(p, "New") for p in products]
 
-
-# ── Farmers endpoint ──────────────────────────────────────────────────────────
-
 @recommendations_router.get("/farmers")
 def recommend_farmers(
     limit:        int     = Query(6, ge=1, le=20),
@@ -323,6 +320,10 @@ def recommend_farmers(
         pop_score  = farmer_popularity.get(f.id, 0.0)
         prod_count = product_counts.get(f.id, 0)
 
+        # ── KEY FIX: exclude farmers with no location overlap when user has a location ──
+        if user_loc.strip() and loc_score == 0.0:
+            continue
+
         final = (loc_score * 0.6) + (pop_score * 0.25) + (min(prod_count, 10) / 10 * 0.15)
 
         scored.append({
@@ -338,11 +339,27 @@ def recommend_farmers(
             "_score":        final,
         })
 
+    # Fallback: if user has no location OR no local farmers found, return all sorted by popularity
+    if not scored:
+        for f in farmers:
+            pop_score  = farmer_popularity.get(f.id, 0.0)
+            prod_count = product_counts.get(f.id, 0)
+            scored.append({
+                "id":            f.id,
+                "full_name":     f.full_name,
+                "location":      f.location,
+                "avatar_url":    getattr(f, "avatar_url",  None),
+                "phone":         getattr(f, "phone",       None),
+                "is_verified":   getattr(f, "is_verified", False),
+                "badges":        getattr(f, "badges",      []),
+                "product_count": prod_count,
+                "match_label":   "Explore",
+                "_score":        (pop_score * 0.7) + (min(prod_count, 10) / 10 * 0.3),
+            })
+
     scored.sort(key=lambda x: (-x["_score"], -x["product_count"]))
     for item in scored: item.pop("_score", None)
     return scored[offset: offset + limit]
-
-
 # ── Track view ────────────────────────────────────────────────────────────────
 
 @recommendations_router.post("/view", status_code=204)

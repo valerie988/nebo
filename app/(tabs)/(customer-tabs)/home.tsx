@@ -284,25 +284,16 @@ export default function HomeScreen() {
 
       switch (filter) {
         case "nearby":
-          // Products with Nearby match_label — use recommendation endpoint
-          // and filter client-side since backend already sorts by location
-          url = `${API_URL}/api/recommendations/products?limit=20`;
+          url = `${API_URL}/api/recommendations/products?filter=nearby&limit=20`;
           break;
-
         case "recommended":
-          // Full hybrid recommendations (location + CF + popularity)
-          url = `${API_URL}/api/recommendations/products?limit=20`;
+          url = `${API_URL}/api/recommendations/products?filter=recommended&limit=20`;
           break;
-
         case "popular":
-          // Popular = most viewed — backend sorts by popularity score
-          // We request a large pool and take highest popularity
-          url = `${API_URL}/api/recommendations/products?limit=50`;
+          url = `${API_URL}/api/recommendations/products?filter=popular&limit=20`;
           break;
-
         default:
-          // All products — plain product list sorted by recency
-          url = `${API_URL}/api/products?limit=20`;
+          url = `${API_URL}/api/recommendations/products?filter=all&limit=20`;
           break;
       }
 
@@ -311,30 +302,9 @@ export default function HomeScreen() {
       });
       if (!res.ok) throw new Error(`${res.status}`);
 
-      let data = await res.json();
+      const data = await res.json();
 
-      // Client-side post-filter for filters that need it
-      if (filter === "nearby") {
-        // Only show exact local matches
-        const nearby = data.filter(
-          (p: any) =>
-            p.match_label === "Nearby" || p.match_label === "Your Region",
-        );
-        data = nearby.length > 0 ? nearby : data; // fallback to all if no local results
-      }
-
-      if (filter === "popular") {
-        // Popular = products with "Recommended" label (high CF/popularity score)
-        // Since backend sorts by score, just take the top results
-        // The popularity signal is already baked into the score
-        data = data.slice(0, 10);
-      }
-
-      // Fix match_label for plain products (no label from plain endpoint)
-      if (filter === "all") {
-        data = data.map((p: any) => ({ ...p, match_label: undefined }));
-      }
-
+      // ── Save products to state ────────────────────────────────────────────
       setAllProducts(data);
 
       // Location label for header
@@ -366,7 +336,7 @@ export default function HomeScreen() {
       if (token) {
         const res = await fetch(
           `${API_URL}/api/recommendations/farmers?limit=6`,
-          { headers: headers as Record<string, string>},
+          { headers: headers as Record<string, string> },
         );
         if (res.ok) {
           setFarmers(await res.json());
@@ -561,7 +531,7 @@ export default function HomeScreen() {
               snapToInterval={ITEM_LENGTH}
               decelerationRate="fast"
               showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ paddingHorizontal: scale(16)}}
+              contentContainerStyle={{ paddingHorizontal: scale(16) }}
               initialScrollIndex={1}
               getItemLayout={(_, i) => ({
                 length: ITEM_LENGTH,

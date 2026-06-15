@@ -246,6 +246,7 @@ export default function AddProductScreen() {
         >
           <ScrollView
             showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
             contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 50 }}
           >
             {/* Image Uploader */}

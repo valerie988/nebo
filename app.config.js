@@ -18,6 +18,12 @@ export default ({ config }) => {
         backgroundColor: "#F0FAF4",
       },
 
+      androidStatusBar: {
+        backgroundColor: "#F8FDF9",
+        barStyle: "dark-content",
+        translucent: false,
+      },
+
       ios: {
         supportsTablet: true,
         bundleIdentifier: "com.nehvalerie.nebo",
@@ -25,6 +31,7 @@ export default ({ config }) => {
 
       android: {
         package: "com.nehvalerie.nebo",
+        softwareKeyboardLayoutMode: "pan",
         adaptiveIcon: {
           foregroundImage: "./assets/images/logo.png",
           backgroundColor: "#F0FAF4",
@@ -38,8 +45,7 @@ export default ({ config }) => {
       extra: {
         API_URL: "https://overflowing-warmth-production-f457.up.railway.app",
 
-        CLOUDINARY_CLOUD_NAME:
-          process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME,
+        CLOUDINARY_CLOUD_NAME: process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME,
 
         CLOUDINARY_UPLOAD_PRESET:
           process.env.EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET,
