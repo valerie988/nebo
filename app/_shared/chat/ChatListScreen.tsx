@@ -35,9 +35,17 @@ function resolveUserId(user: any): string {
   return String(raw).trim();
 }
 
+// Ensures a bare ISO string from the backend (no Z suffix) is treated as UTC.
+function toUtc(iso: string): string {
+  if (!iso) return iso;
+  return iso.endsWith("Z") || iso.includes("+") || iso.includes("-", 10)
+    ? iso
+    : iso + "Z";
+}
+
 function formatTime(iso: string): string {
   if (!iso) return "";
-  const diff = Date.now() - new Date(iso).getTime();
+  const diff = Date.now() - new Date(toUtc(iso)).getTime();
   const mins = Math.floor(diff / 60000);
   const hours = Math.floor(diff / 3600000);
   const days = Math.floor(diff / 86400000);
@@ -45,7 +53,7 @@ function formatTime(iso: string): string {
   if (mins < 60) return `${mins}m`;
   if (hours < 24) return `${hours}h`;
   if (days < 7) return `${days}d`;
-  return new Date(iso).toLocaleDateString("en", {
+  return new Date(toUtc(iso)).toLocaleDateString("en", {
     day: "numeric",
     month: "short",
   });
@@ -54,7 +62,7 @@ function formatTime(iso: string): string {
 function expiryLabel(lastAt: string, createdAt: string): string {
   const ref = lastAt || createdAt;
   const left =
-    3 * 24 * 60 * 60 * 1000 - (Date.now() - new Date(ref).getTime());
+    3 * 24 * 60 * 60 * 1000 - (Date.now() - new Date(toUtc(ref)).getTime());
   if (left <= 0) return "Expired";
   const hrs = Math.floor(left / 3600000);
   return hrs < 24
