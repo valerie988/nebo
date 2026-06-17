@@ -18,7 +18,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-// ✅ FIXED: Standardized URL generation matching your global layout architecture
+// FIXED: Standardized URL generation matching your global layout architecture
 const BASE_URL = Constants.expoConfig?.extra?.API_URL;
 
 export default function EditProductScreen() {

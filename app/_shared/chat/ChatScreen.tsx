@@ -397,7 +397,7 @@ export function ChatScreen() {
                   }}
                 >
                   <Text
-                    style={{
+                     style={{
                       color: "#1B4332",
                       fontWeight: "700",
                       fontSize: 16,

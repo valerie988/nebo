@@ -70,21 +70,21 @@ export default function EditProfileScreen() {
           name: "avatar.jpg",
           type: "image/jpeg",
         } as any);
-        // ✅ FIXED: Use the variable UPLOAD_PRESET instead of a hardcoded string
+        // FIXED: Use the variable UPLOAD_PRESET instead of a hardcoded string
         formData.append("upload_preset", UPLOAD_PRESET!);
 
         const response = await fetch(
           `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`,
           {
             method: "POST",
-            body: formData, // ✅ FIXED: Used the actual formData object created above
+            body: formData, // FIXED: Used the actual formData object created above
             headers: {
               Accept: "application/json",
             },
           },
         );
 
-        const cloudData = await response.json(); // ✅ FIXED: consistent naming
+        const cloudData = await response.json(); // FIXED: consistent naming
 
         if (!cloudData.secure_url) {
           throw new Error(

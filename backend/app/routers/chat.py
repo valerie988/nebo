@@ -202,9 +202,6 @@ async def websocket_endpoint(ws: WebSocket, token: str, db: Session = Depends(ge
     finally:
         manager.disconnect(user_id, ws)
 
-
-# ── REST: conversations list ──────────────────────────────────────────────────
-
 @chat_router.get("/conversations")
 def get_conversations(
     db:           Session = Depends(get_db),
@@ -224,7 +221,6 @@ def get_conversations(
 
     result = []
     for c in convos:
-        # other_id is whoever is NOT the current user
         other_id   = c.participant_two if c.participant_one == current_user.id else c.participant_one
         other_user = db.query(User).filter(User.id == other_id).first()
 
@@ -245,15 +241,14 @@ def get_conversations(
             "participant_one": c.participant_one,
             "participant_two": c.participant_two,
             "updated_at":      c.updated_at.isoformat() if c.updated_at else None,
-            "other_id":        other_id,                                    # ← mobile uses this
-            "other_name":      other_user.full_name if other_user else "Unknown",  # ← mobile uses this
-            "other_role":      other_user.role      if other_user else "customer", # ← mobile uses this
+            "other_id":        other_id,
+            "other_name":      other_user.full_name if other_user else "Unknown",
+            "other_role":      other_user.role      if other_user else "customer",
             "last_message":    last_msg.text         if last_msg   else "",
             "unread_count":    unread,
         })
 
     return result
-
 
 # ── REST: create conversation ─────────────────────────────────────────────────
 

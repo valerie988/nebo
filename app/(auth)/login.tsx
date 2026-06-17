@@ -36,7 +36,7 @@ export default function LoginScreen() {
       setError("");
 
       const res = await authService.login({
-        identity: identity.trim(), // ✅ renamed from 'email', role dropped
+        identity: identity.trim(), // renamed from 'email', role dropped
         password,
       });
 
@@ -47,7 +47,7 @@ export default function LoginScreen() {
 
         console.log("AUTH CONTEXT UPDATED");
 
-        setLoading(false); // ✅ clear spinner before navigation
+        setLoading(false); // clear spinner before navigation
 
         router.replace(
           res.role === "farmer"
@@ -115,7 +115,7 @@ export default function LoginScreen() {
                   }}
                   keyboardType="default"
                   autoCapitalize="none"
-                  autoCorrect={false} // ✅ prevents autocorrect mangling phone/email
+                  autoCorrect={false} // prevents autocorrect mangling phone/email
                 />
               </View>
 
@@ -132,7 +132,7 @@ export default function LoginScreen() {
                     setPassword(t);
                     setError("");
                   }}
-                  autoCorrect={false} // ✅ prevent autocorrect on password
+                  autoCorrect={false} // prevent autocorrect on password
                 />
                 <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
                   <Ionicons

@@ -115,7 +115,7 @@ def delete_notification(
     db: Session = Depends(get_db),
 ):
     """Remove a single specific notification safely from the database feed."""
-    # ✅ FIXED: Realigned indentation to remain inside function context scope
+    # FIXED: Realigned indentation to remain inside function context scope
     notif = db.query(Notification).filter(
         Notification.id == notif_id,
         Notification.user_id == current_user.id,

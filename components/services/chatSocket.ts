@@ -1,4 +1,5 @@
 import Constants from "expo-constants";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { chatService, Message } from "./chatService";
 
 const RAW_URL = Constants.expoConfig?.extra?.API_URL || "http://localhost:8000";
@@ -20,7 +21,7 @@ class ChatSocket {
 
   connect(token: string, userId: string): void {
     this.token     = token;
-    this.userId    = userId;
+    this.userId    = String(userId);   // ← always string, fixes int/string mismatch
     this.destroyed = false;
     this._open();
   }
@@ -76,16 +77,17 @@ class ChatSocket {
       this.ws = new WebSocket(`${WS_BASE}/api/chat/ws/${this.token}`);
 
       this.ws.onopen = async () => {
+         console.log(" WebSocket connected for user:", this.userId);
         this.retryCount = 0;
         this._notifyStatus(true);
         await this._flushPending();
       };
 
       this.ws.onmessage = async (event) => {
+        console.log(" WS message received:", event.data);
         try {
           const data = JSON.parse(event.data);
 
-          // ── Delivery confirmation for our own sent message ─────────────────
           if (data.type === "delivered" && data.local_id) {
             await chatService.confirmMessage(
               this.userId, data.local_id, data.message_id, data.conversation_id
@@ -93,22 +95,23 @@ class ChatSocket {
             return;
           }
 
-          // ── Incoming message from the other person ────────────────────────
           if (data.type === "message") {
-            const isMyEcho = data.sender_id === this.userId;
+            // Compare as strings to avoid int/string mismatch
+            const isMyEcho = String(data.sender_id) === String(this.userId);
 
             if (isMyEcho && data.local_id) {
-              // Echo of our own message — just confirm, don't re-add
               await chatService.confirmMessage(
                 this.userId, data.local_id, data.id, data.conversation_id
               );
               return;
             }
 
-            const senderRole = data.sender_role || "customer"; 
+            const senderRole = data.sender_role || "customer";
+
+            // Ensure conversation exists locally BEFORE saving the message
             await chatService.getOrCreateConversation(this.userId, {
-              participantId:    data.sender_id,
-              participantName:  data.sender_name,  
+              participantId:    String(data.sender_id),
+              participantName:  data.sender_name,
               participantRole:  senderRole,
               serverConvoId:    data.conversation_id,
             });
@@ -116,9 +119,9 @@ class ChatSocket {
             const msg: Message = {
               id:             data.id,
               conversationId: data.conversation_id,
-              senderId:       data.sender_id,
+              senderId:       String(data.sender_id),
               senderName:     data.sender_name || "",
-              receiverId:     data.receiver_id,
+              receiverId:     String(data.receiver_id),
               receiverName:   data.receiver_name || "",
               text:           data.text,
               createdAt:      data.created_at,
@@ -135,7 +138,7 @@ class ChatSocket {
         }
       };
 
-      this.ws.onerror  = () => {};
+      this.ws.onerror  = (e) => { console.warn("chatSocket error:", e); };
       this.ws.onclose  = () => {
         this._notifyStatus(false);
         if (!this.destroyed) this._scheduleRetry();

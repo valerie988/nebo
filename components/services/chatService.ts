@@ -80,50 +80,69 @@ export const chatService = {
       (a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime()
     );
   },
+async getOrCreateConversation(
+  currentUserId: string,
+  params: {
+    participantId:    string;
+    participantName:  string;
+    participantRole:  "farmer" | "customer";
+    participantPhone?: string;
+    serverConvoId?:   string;
+  }
+): Promise<Conversation> {
+  const keys = KEYS(currentUserId);
+  const all  = await read<Conversation[]>(keys.conversations, []);
 
-  // ── Get or create a conversation scoped to this user ──────────────────────
-  async getOrCreateConversation(
-    currentUserId: string,
-    params: {
-      participantId:    string;
-      participantName:  string;  // the OTHER person's name
-      participantRole:  "farmer" | "customer";
-      participantPhone?: string;
-      serverConvoId?:   string;
+  // Normalize to string for safe comparison
+  const normalizedParticipantId = String(params.participantId);
+  const normalizedServerConvoId = params.serverConvoId ? String(params.serverConvoId) : undefined;
+
+  const existing = all.find(
+    c => String(c.participantId) === normalizedParticipantId ||
+         (normalizedServerConvoId && String(c.id) === normalizedServerConvoId)
+  );
+
+  if (existing) {
+    let changed = false;
+
+    if (params.participantPhone && !existing.participantPhone) {
+      existing.participantPhone = params.participantPhone;
+      changed = true;
     }
-  ): Promise<Conversation> {
-    const keys = KEYS(currentUserId);
-    const all  = await read<Conversation[]>(keys.conversations, []);
-
-    const existing = all.find(
-      c => c.participantId === params.participantId ||
-           (params.serverConvoId && c.id === params.serverConvoId)
-    );
-
-    if (existing) {
-      // Update phone if now available
-      if (params.participantPhone && !existing.participantPhone) {
-        existing.participantPhone = params.participantPhone;
-        await write(keys.conversations, all);
-      }
-      return existing;
+    // Fix role/name if they were saved incorrectly
+    if (existing.participantRole !== params.participantRole) {
+      existing.participantRole = params.participantRole;
+      changed = true;
+    }
+    if (params.participantName && existing.participantName !== params.participantName) {
+      existing.participantName = params.participantName;
+      changed = true;
+    }
+    // Fix participantId if it was stored as wrong type
+    if (existing.participantId !== normalizedParticipantId) {
+      existing.participantId = normalizedParticipantId;
+      changed = true;
     }
 
-    const convo: Conversation = {
-      id:               params.serverConvoId || makeUUID(),
-      participantId:    params.participantId,
-      participantName:  params.participantName,   // always OTHER person
-      participantRole:  params.participantRole,
-      participantPhone: params.participantPhone,
-      lastMessage:      "",
-      lastMessageAt:    new Date().toISOString(),
-      unreadCount:      0,
-      createdAt:        new Date().toISOString(),
-    };
+    if (changed) await write(keys.conversations, all);
+    return existing;
+  }
 
-    await write(keys.conversations, [convo, ...all]);
-    return convo;
-  },
+  const convo: Conversation = {
+    id:               normalizedServerConvoId || makeUUID(),
+    participantId:    normalizedParticipantId,
+    participantName:  params.participantName,
+    participantRole:  params.participantRole,
+    participantPhone: params.participantPhone,
+    lastMessage:      "",
+    lastMessageAt:    new Date().toISOString(),
+    unreadCount:      0,
+    createdAt:        new Date().toISOString(),
+  };
+
+  await write(keys.conversations, [convo, ...all]);
+  return convo;
+},
 
   // ── Get messages for a conversation ───────────────────────────────────────
   async getMessages(userId: string, conversationId: string): Promise<Message[]> {

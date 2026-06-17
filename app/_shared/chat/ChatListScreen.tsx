@@ -234,13 +234,11 @@ export default function ChatListScreen() {
       if (!Array.isArray(serverConvos)) return;
 
       for (const sc of serverConvos) {
-        if (!sc.other_id || !sc.other_name) continue;
-
-        await chatService.getOrCreateConversation(userId, {
-          participantId: sc.other_id,
-          participantName: sc.other_name,
-          participantRole: sc.other_role || "customer",
-          serverConvoId: sc.id,
+        console.log(" server convo:", {
+          other_id: sc.other_id,
+          other_name: sc.other_name,
+          other_role: sc.other_role, // ← should be "customer" when farmer is viewing
+          my_userId: userId,
         });
 
         const msgRes = await fetch(
@@ -285,9 +283,29 @@ export default function ChatListScreen() {
 
   useEffect(() => {
     if (!userId) return;
-    AsyncStorage.getItem("access_token").then((token) => {
-      if (token) chatSocket.connect(token, userId);
-    });
+
+    const connectSocket = async () => {
+      const token =
+        (await AsyncStorage.getItem("access_token")) ||
+        (await AsyncStorage.getItem("nebo_token")) ||
+        (await AsyncStorage.getItem("token"));
+
+      console.log(" WS token found:", !!token);
+      console.log(" userId:", userId);
+      console.log(
+        "🔌 token key used:",
+        (await AsyncStorage.getItem("access_token"))
+          ? "access_token"
+          : (await AsyncStorage.getItem("nebo_token"))
+            ? "nebo_token"
+            : "token",
+      );
+
+      if (token) chatSocket.connect(token, String(userId));
+    };
+
+    connectSocket();
+
     const u1 = chatSocket.onStatus(setOnline);
     const u2 = chatSocket.onMessage(() => load());
     return () => {

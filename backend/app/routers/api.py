@@ -70,7 +70,7 @@ def get_user(user_id: str, db: Session = Depends(get_db)):
 # PRODUCTS ROUTES
 # ──────────────────────────────────────────────────────────────────────────────
 
-# ✅ NEW STRATEGY: JSON Endpoint for Mobile App (Front-end uploads to Cloudinary)
+# EW STRATEGY: JSON Endpoint for Mobile App (Front-end uploads to Cloudinary)
 @products_router.post("", response_model=ProductOut, status_code=201)
 async def create_product(
     payload: ProductCreateJSON,

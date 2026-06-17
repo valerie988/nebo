@@ -23,7 +23,7 @@ function RootLayoutNav() {
     null,
   );
 
-  // ✅ Re-reads AsyncStorage every time the route changes
+  // Re-reads AsyncStorage every time the route changes
   useEffect(() => {
     AsyncStorage.getItem("has_seen_onboarding").then((val) => {
       setHasSeenOnboarding(val === "true");

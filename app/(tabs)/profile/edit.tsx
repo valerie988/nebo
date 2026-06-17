@@ -114,7 +114,7 @@ export default function EditProfileScreen() {
         type: "image/jpeg",
       } as any);
       
-      // ✅ REPLACE THESE WITH YOUR ACTUAL CLOUDINARY VALUES
+      // REPLACE THESE WITH YOUR ACTUAL CLOUDINARY VALUES
       formData.append("upload_preset", process.env.EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET || "");
 
       const cloudinaryRes = await fetch(

@@ -193,7 +193,7 @@ export default function AddProductScreen() {
         }
 
         finalImageUrl = cloudinaryResult.secure_url;
-        console.log("✅ Cloudinary Upload Success! URL:", finalImageUrl);
+        console.log("Cloudinary Upload Success! URL:", finalImageUrl);
       }
 
       const token =
