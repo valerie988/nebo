@@ -21,6 +21,20 @@ const API_URL = Constants.expoConfig?.extra?.API_URL || "http://localhost:8000";
 const { width } = Dimensions.get("window");
 const scale = (size: number) => (width / 375) * size;
 
+// ─── helpers ─────────────────────────────────────────────────────────────────
+
+/**
+ * Resolves a consistent, trimmed string userId from whatever shape the
+ * auth context returns.  Covers:  id | user_id | pk | _id
+ */
+function resolveUserId(user: any): string {
+  if (!user) return "";
+  // Auth context stores the /auth/me response which uses "id".
+  // user_id is the fallback in case the raw TokenResponse is stored instead.
+  const raw = user.id ?? user.user_id ?? "";
+  return String(raw).trim();
+}
+
 function formatTime(iso: string): string {
   if (!iso) return "";
   const diff = Date.now() - new Date(iso).getTime();
@@ -39,13 +53,16 @@ function formatTime(iso: string): string {
 
 function expiryLabel(lastAt: string, createdAt: string): string {
   const ref = lastAt || createdAt;
-  const left = 3 * 24 * 60 * 60 * 1000 - (Date.now() - new Date(ref).getTime());
+  const left =
+    3 * 24 * 60 * 60 * 1000 - (Date.now() - new Date(ref).getTime());
   if (left <= 0) return "Expired";
   const hrs = Math.floor(left / 3600000);
   return hrs < 24
     ? `Expires in ${hrs}h`
     : `Expires in ${Math.floor(hrs / 24)}d`;
 }
+
+// ─── components ──────────────────────────────────────────────────────────────
 
 function Avatar({ name, role }: { name: string; role: string }) {
   const initials = (name || "?")
@@ -202,6 +219,8 @@ function ConvoRow({
   );
 }
 
+// ─── screen ──────────────────────────────────────────────────────────────────
+
 export default function ChatListScreen() {
   const router = useRouter();
   const { user } = useAuth();
@@ -209,7 +228,8 @@ export default function ChatListScreen() {
   const [online, setOnline] = useState(false);
   const [syncing, setSyncing] = useState(false);
 
-  const userId = user?.id || (user as any)?.user_id || "";
+  // FIX: use resolveUserId so both farmer and customer auth shapes work
+  const userId = resolveUserId(user);
 
   const load = useCallback(async () => {
     if (!userId) return;
@@ -234,35 +254,56 @@ export default function ChatListScreen() {
       if (!Array.isArray(serverConvos)) return;
 
       for (const sc of serverConvos) {
-        console.log(" server convo:", {
-          other_id: sc.other_id,
-          other_name: sc.other_name,
-          other_role: sc.other_role, // ← should be "customer" when farmer is viewing
-          my_userId: userId,
+        if (!sc.other_id || !sc.other_name) continue;
+
+        await chatService.getOrCreateConversation(userId, {
+          participantId:   String(sc.other_id).trim(),
+          participantName: sc.other_name,
+          participantRole: sc.other_role || "customer",
+          serverConvoId:   String(sc.id).trim(),
         });
 
         const msgRes = await fetch(
           `${API_URL}/api/chat/conversations/${sc.id}/messages`,
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          },
+          { headers: { Authorization: `Bearer ${token}` } },
         );
+        if (!msgRes.ok) continue;
         const msgs = await msgRes.json();
+        if (!Array.isArray(msgs)) continue;
 
         for (const m of msgs) {
-          await chatService.receiveMessage(userId, {
-            id: m.id,
-            conversationId: m.conversation_id,
-            senderId: m.sender_id,
-            senderName: m.sender_name || sc.other_name,
-            receiverId: m.receiver_id,
-            receiverName: "",
-            text: m.text,
-            createdAt: m.created_at,
-            read: m.read,
-            pending: false,
-            synced: true,
-          });
+          const mSenderId   = String(m.sender_id).trim();
+          const mReceiverId = String(m.receiver_id).trim();
+
+          if (mSenderId === userId) {
+            // Message WE sent — use storeSentMessage so it appears on the
+            // right (isMe=true) and does NOT increment unread count
+            await chatService.storeSentMessage(userId, {
+              id:             m.id,
+              conversationId: m.conversation_id,
+              senderId:       mSenderId,
+              senderName:     m.sender_name || "",
+              receiverId:     mReceiverId,
+              receiverName:   sc.other_name,
+              text:           m.text,
+              createdAt:      m.created_at,
+            });
+          } else {
+            // Message FROM the other person TO us
+            await chatService.receiveMessage(userId, {
+              id:             m.id,
+              conversationId: m.conversation_id,
+              senderId:       mSenderId,
+              senderName:     m.sender_name || sc.other_name,
+              receiverId:     mReceiverId,
+              receiverName:   "",
+              text:           m.text,
+              createdAt:      m.created_at,
+              read:           m.read,
+              pending:        false,
+              synced:         true,
+            });
+          }
         }
       }
 
@@ -289,19 +330,8 @@ export default function ChatListScreen() {
         (await AsyncStorage.getItem("access_token")) ||
         (await AsyncStorage.getItem("nebo_token")) ||
         (await AsyncStorage.getItem("token"));
-
-      console.log(" WS token found:", !!token);
-      console.log(" userId:", userId);
-      console.log(
-        "🔌 token key used:",
-        (await AsyncStorage.getItem("access_token"))
-          ? "access_token"
-          : (await AsyncStorage.getItem("nebo_token"))
-            ? "nebo_token"
-            : "token",
-      );
-
-      if (token) chatSocket.connect(token, String(userId));
+      // FIX: pass resolved userId so socket echo-check uses the same value
+      if (token) chatSocket.connect(token, userId);
     };
 
     connectSocket();
@@ -419,17 +449,13 @@ export default function ChatListScreen() {
                 item={item}
                 onLongPress={() => confirmDelete(item)}
                 onPress={() => {
-                  const recipientId =
-                    item.participantId ||
-                    (item as any).other_id ||
-                    (item as any).userId;
                   router.push({
                     pathname: "./chat/[id]",
                     params: {
-                      id: item.id,
-                      participantName: item.participantName,
-                      participantId: recipientId,
-                      participantRole: item.participantRole,
+                      id:               item.id,
+                      participantName:  item.participantName,
+                      participantId:    item.participantId,
+                      participantRole:  item.participantRole,
                       participantPhone: item.participantPhone || "",
                     },
                   });

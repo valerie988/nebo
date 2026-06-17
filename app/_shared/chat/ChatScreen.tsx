@@ -19,7 +19,20 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ─── helpers ────────────────────────────────────────────────────────────────
+
+/**
+ * Resolves a consistent, trimmed string userId from whatever shape the
+ * auth context returns.  Covers:  id | user_id | pk | _id
+ */
+function resolveUserId(user: any): string {
+  if (!user) return "";
+  // Auth context stores the /auth/me response which uses "id".
+  // user_id is the fallback in case the raw TokenResponse is stored instead.
+  const raw = user.id ?? user.user_id ?? "";
+  return String(raw).trim();
+}
+
 function formatMsgTime(iso: string): string {
   try {
     const d = new Date(iso);
@@ -36,7 +49,7 @@ function isSameDay(a: string, b: string) {
 }
 
 function dayLabel(iso: string): string {
-  const d = new Date(iso);
+  const d   = new Date(iso);
   const now = new Date();
   if (d.toDateString() === now.toDateString()) return "Today";
   const yest = new Date(now);
@@ -44,20 +57,22 @@ function dayLabel(iso: string): string {
   if (d.toDateString() === yest.toDateString()) return "Yesterday";
   return d.toLocaleDateString("en", {
     weekday: "long",
-    month: "short",
-    day: "numeric",
+    month:   "short",
+    day:     "numeric",
   });
 }
+
+// ─── components ─────────────────────────────────────────────────────────────
 
 function DateDivider({ label }: { label: string }) {
   return (
     <View style={{ alignItems: "center", marginVertical: 12 }}>
       <View
         style={{
-          backgroundColor: "#D8F3DC",
+          backgroundColor:  "#D8F3DC",
           paddingHorizontal: 14,
-          paddingVertical: 4,
-          borderRadius: 99,
+          paddingVertical:   4,
+          borderRadius:      99,
         }}
       >
         <Text style={{ color: "#1B4332", fontSize: 11, fontWeight: "600" }}>
@@ -72,30 +87,30 @@ function Bubble({ msg, isMe }: { msg: Message; isMe: boolean }) {
   return (
     <View
       style={{
-        alignItems: isMe ? "flex-end" : "flex-start",
-        marginBottom: 4,
+        alignItems:       isMe ? "flex-end" : "flex-start",
+        marginBottom:     4,
         paddingHorizontal: 12,
       }}
     >
       <View
         style={{
-          maxWidth: "76%",
-          backgroundColor: isMe ? "#1B4332" : "#FFFFFF",
-          borderRadius: 18,
+          maxWidth:              "76%",
+          backgroundColor:       isMe ? "#1B4332" : "#FFFFFF",
+          borderRadius:          18,
           borderBottomRightRadius: isMe ? 4 : 18,
-          borderBottomLeftRadius: isMe ? 18 : 4,
-          paddingHorizontal: 14,
-          paddingVertical: 10,
-          elevation: 1,
-          shadowColor: "#000",
-          shadowOpacity: 0.06,
-          shadowRadius: 3,
+          borderBottomLeftRadius:  isMe ? 18 : 4,
+          paddingHorizontal:     14,
+          paddingVertical:       10,
+          elevation:             1,
+          shadowColor:           "#000",
+          shadowOpacity:         0.06,
+          shadowRadius:          3,
         }}
       >
         <Text
           style={{
-            color: isMe ? "#D8F3DC" : "#1B4332",
-            fontSize: 15,
+            color:      isMe ? "#D8F3DC" : "#1B4332",
+            fontSize:   15,
             lineHeight: 22,
           }}
         >
@@ -103,11 +118,11 @@ function Bubble({ msg, isMe }: { msg: Message; isMe: boolean }) {
         </Text>
         <View
           style={{
-            flexDirection: "row",
-            alignItems: "center",
+            flexDirection:  "row",
+            alignItems:     "center",
             justifyContent: isMe ? "flex-end" : "flex-start",
-            marginTop: 4,
-            gap: 4,
+            marginTop:      4,
+            gap:            4,
           }}
         >
           <Text style={{ color: isMe ? "#52B788" : "#95D5B2", fontSize: 10 }}>
@@ -117,10 +132,10 @@ function Bubble({ msg, isMe }: { msg: Message; isMe: boolean }) {
             <Text
               style={{
                 fontSize: 10,
-                color: msg.pending ? "#B7E4C7" : "#52B788",
+                color:    msg.pending ? "#B7E4C7" : "#52B788",
               }}
             >
-              {msg.pending ? "" : msg.synced ? "✓✓" : "✓"}
+              {msg.pending ? "⏱" : msg.synced ? "✓✓" : "✓"}
             </Text>
           )}
         </View>
@@ -128,6 +143,8 @@ function Bubble({ msg, isMe }: { msg: Message; isMe: boolean }) {
     </View>
   );
 }
+
+// ─── list builder ────────────────────────────────────────────────────────────
 
 type ListItem =
   | { type: "divider"; label: string; key: string }
@@ -139,9 +156,9 @@ function buildItems(messages: Message[]): ListItem[] {
   for (const msg of messages) {
     if (!lastDay || !isSameDay(msg.createdAt, lastDay)) {
       items.push({
-        type: "divider",
+        type:  "divider",
         label: dayLabel(msg.createdAt),
-        key: `div-${msg.createdAt}`,
+        key:   `div-${msg.createdAt}`,
       });
       lastDay = msg.createdAt;
     }
@@ -150,30 +167,34 @@ function buildItems(messages: Message[]): ListItem[] {
   return items;
 }
 
+// ─── screen ──────────────────────────────────────────────────────────────────
+
 export function ChatScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const params = useLocalSearchParams<{
-    id: string;
-    participantName: string;
-    participantId: string;
-    participantRole: string;
+    id:               string;
+    participantName:  string;
+    participantId:    string;
+    participantRole:  string;
     participantPhone: string;
   }>();
 
-  const convoId = params.id;
-  const participantName = params.participantName ?? "Chat";
+  const convoId         = params.id;
+  const participantName  = params.participantName ?? "Chat";
   const participantPhone = params.participantPhone || "";
-  const userId = user?.id || (user as any)?.user_id || "";
+
+  // FIX: use resolveUserId so both farmer and customer auth shapes work
+  const userId   = resolveUserId(user);
   const userName = user?.full_name || (user as any)?.name || "Me";
 
   const [messages, setMessages] = useState<Message[]>([]);
-  const [text, setText] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [online, setOnline] = useState(chatSocket.isConnected);
-  const [sending, setSending] = useState(false);
+  const [text,     setText]     = useState("");
+  const [loading,  setLoading]  = useState(true);
+  const [online,   setOnline]   = useState(chatSocket.isConnected);
+  const [sending,  setSending]  = useState(false);
 
-  const listRef = useRef<FlatList>(null);
+  const listRef  = useRef<FlatList>(null);
   const inputRef = useRef<TextInput>(null);
 
   const scrollToBottom = (animated = true) =>
@@ -190,18 +211,25 @@ export function ChatScreen() {
 
   useEffect(() => {
     loadMessages();
-    AsyncStorage.getItem("access_token").then((token) => {
+
+    const connectSocket = async () => {
+      const token =
+        (await AsyncStorage.getItem("access_token")) ||
+        (await AsyncStorage.getItem("nebo_token"))   ||
+        (await AsyncStorage.getItem("token"));
       if (token && userId) chatSocket.connect(token, userId);
-    });
+    };
+    connectSocket();
+
     const u1 = chatSocket.onStatus(setOnline);
     const u2 = chatSocket.onMessage(async (msg) => {
       if (msg.conversationId !== convoId) return;
       setMessages((prev) => {
         const exists = prev.some(
-          (m) => m.id === msg.id || m.localId === msg.id,
+          m => m.id === msg.id || m.localId === msg.id,
         );
         if (exists) {
-          return prev.map((m) =>
+          return prev.map(m =>
             m.id === msg.id || m.localId === msg.id
               ? { ...m, id: msg.id, pending: false, synced: true }
               : m,
@@ -212,6 +240,7 @@ export function ChatScreen() {
       scrollToBottom(true);
       if (userId) await chatService.markAsRead(userId, convoId);
     });
+
     return () => {
       u1();
       u2();
@@ -226,32 +255,24 @@ export function ChatScreen() {
     try {
       const msg = await chatService.sendMessage(userId, {
         conversationId: convoId,
-        senderId: userId,
-        senderName: userName,
-        receiverId: params.participantId,
-        receiverName: participantName,
-        text: trimmed,
+        senderId:       userId,          // FIX: always use resolved userId
+        senderName:     userName,
+        receiverId:     String(params.participantId).trim(),
+        receiverName:   participantName,
+        text:           trimmed,
       });
-      setMessages((prev) => [...prev, msg]);
+      setMessages(prev => [...prev, msg]);
       scrollToBottom(true);
       chatSocket.send({
-        localId: msg.localId!,
-        receiverId: params.participantId,
-        text: trimmed,
+        localId:        msg.localId!,
+        receiverId:     String(params.participantId).trim(),
+        text:           trimmed,
         conversationId: convoId,
       });
     } finally {
       setSending(false);
     }
-  }, [
-    text,
-    userId,
-    userName,
-    convoId,
-    params.participantId,
-    participantName,
-    sending,
-  ]);
+  }, [text, userId, userName, convoId, params.participantId, participantName, sending]);
 
   const handleCall = () => {
     if (!participantPhone) {
@@ -263,10 +284,7 @@ export function ChatScreen() {
     }
     Alert.alert(`Call ${participantName}`, participantPhone, [
       { text: "Cancel", style: "cancel" },
-      {
-        text: "Call",
-        onPress: () => Linking.openURL(`tel:${participantPhone}`),
-      },
+      { text: "Call", onPress: () => Linking.openURL(`tel:${participantPhone}`) },
     ]);
   };
 
@@ -278,17 +296,17 @@ export function ChatScreen() {
         {/* Header */}
         <View
           style={{
-            flexDirection: "row",
-            alignItems: "center",
+            flexDirection:    "row",
+            alignItems:       "center",
             paddingHorizontal: 16,
-            paddingVertical: 12,
-            backgroundColor: "#FFFFFF",
+            paddingVertical:   12,
+            backgroundColor:  "#FFFFFF",
             borderBottomWidth: 0.5,
             borderBottomColor: "#D8F3DC",
-            elevation: 2,
-            shadowColor: "#000",
-            shadowOpacity: 0.05,
-            shadowRadius: 4,
+            elevation:         2,
+            shadowColor:       "#000",
+            shadowOpacity:     0.05,
+            shadowRadius:      4,
           }}
         >
           <TouchableOpacity
@@ -299,13 +317,13 @@ export function ChatScreen() {
           </TouchableOpacity>
           <View
             style={{
-              width: 40,
-              height: 40,
-              borderRadius: 12,
-              marginRight: 10,
+              width:           40,
+              height:          40,
+              borderRadius:    12,
+              marginRight:     10,
               backgroundColor: "#DBEAFE",
-              alignItems: "center",
-              justifyContent: "center",
+              alignItems:      "center",
+              justifyContent:  "center",
             }}
           >
             <Text style={{ fontWeight: "700", fontSize: 14, color: "#1E40AF" }}>
@@ -327,16 +345,16 @@ export function ChatScreen() {
             <View
               style={{
                 flexDirection: "row",
-                alignItems: "center",
-                gap: 5,
-                marginTop: 1,
+                alignItems:    "center",
+                gap:           5,
+                marginTop:     1,
               }}
             >
               <View
                 style={{
-                  width: 6,
-                  height: 6,
-                  borderRadius: 3,
+                  width:           6,
+                  height:          6,
+                  borderRadius:    3,
                   backgroundColor: online ? "#52B788" : "#B7E4C7",
                 }}
               />
@@ -348,12 +366,12 @@ export function ChatScreen() {
           <TouchableOpacity
             onPress={handleCall}
             style={{
-              width: 40,
-              height: 40,
-              borderRadius: 12,
+              width:           40,
+              height:          40,
+              borderRadius:    12,
               backgroundColor: participantPhone ? "#1B4332" : "#F0FAF4",
-              alignItems: "center",
-              justifyContent: "center",
+              alignItems:      "center",
+              justifyContent:  "center",
             }}
           >
             <Ionicons
@@ -371,46 +389,36 @@ export function ChatScreen() {
           keyboardVerticalOffset={0}
         >
           {loading ? (
-            <View
-              style={{
-                flex: 1,
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
+            <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
               <ActivityIndicator color="#52B788" />
             </View>
           ) : (
             <FlatList
               ref={listRef}
               data={items}
-              keyExtractor={(i) => i.key}
+              keyExtractor={i => i.key}
               contentContainerStyle={{ paddingVertical: 12, paddingBottom: 8 }}
               showsVerticalScrollIndicator={false}
               onContentSizeChange={() => scrollToBottom(false)}
               ListEmptyComponent={
                 <View
                   style={{
-                    alignItems: "center",
+                    alignItems:    "center",
                     justifyContent: "center",
-                    marginTop: 80,
+                    marginTop:     80,
                   }}
                 >
                   <Text
-                     style={{
-                      color: "#1B4332",
-                      fontWeight: "700",
-                      fontSize: 16,
-                    }}
+                    style={{ color: "#1B4332", fontWeight: "700", fontSize: 16 }}
                   >
                     Say hello to {participantName.split(" ")[0]}!
                   </Text>
                   <Text
                     style={{
-                      color: "#95D5B2",
-                      fontSize: 13,
-                      marginTop: 6,
-                      textAlign: "center",
+                      color:             "#95D5B2",
+                      fontSize:          13,
+                      marginTop:         6,
+                      textAlign:         "center",
                       paddingHorizontal: 40,
                     }}
                   >
@@ -421,8 +429,13 @@ export function ChatScreen() {
               renderItem={({ item }) => {
                 if (item.type === "divider")
                   return <DateDivider label={item.label} />;
+                // FIX: compare normalized trimmed strings — prevents
+                // farmer bubbles all appearing on the right
                 return (
-                  <Bubble msg={item.msg} isMe={item.msg.senderId === userId} />
+                  <Bubble
+                    msg={item.msg}
+                    isMe={String(item.msg.senderId).trim() === userId}
+                  />
                 );
               }}
             />
@@ -431,27 +444,27 @@ export function ChatScreen() {
           {/* Input bar */}
           <View
             style={{
-              flexDirection: "row",
-              alignItems: "flex-end",
-              gap: 10,
+              flexDirection:  "row",
+              alignItems:     "flex-end",
+              gap:            10,
               paddingHorizontal: 16,
-              paddingVertical: 12,
-              paddingBottom: Platform.OS === "ios" ? 16 : 12,
+              paddingVertical:   12,
+              paddingBottom:  Platform.OS === "ios" ? 16 : 12,
               backgroundColor: "#FFFFFF",
-              borderTopWidth: 0.5,
-              borderTopColor: "#D8F3DC",
+              borderTopWidth:  0.5,
+              borderTopColor:  "#D8F3DC",
             }}
           >
             <View
               style={{
-                flex: 1,
-                borderWidth: 1.5,
-                borderColor: text ? "#52B788" : "#D8F3DC",
-                borderRadius: 24,
+                flex:             1,
+                borderWidth:      1.5,
+                borderColor:      text ? "#52B788" : "#D8F3DC",
+                borderRadius:     24,
                 paddingHorizontal: 16,
-                paddingVertical: 10,
-                backgroundColor: "#F0FAF4",
-                maxHeight: 120,
+                paddingVertical:  10,
+                backgroundColor:  "#F0FAF4",
+                maxHeight:        120,
               }}
             >
               <TextInput
@@ -462,11 +475,11 @@ export function ChatScreen() {
                 placeholderTextColor="#B7E4C7"
                 multiline
                 style={{
-                  color: "#1B4332",
-                  fontSize: 15,
+                  color:      "#1B4332",
+                  fontSize:   15,
                   lineHeight: 22,
-                  padding: 0,
-                  maxHeight: 100,
+                  padding:    0,
+                  maxHeight:  100,
                 }}
                 onSubmitEditing={handleSend}
                 blurOnSubmit={false}
@@ -476,13 +489,12 @@ export function ChatScreen() {
               onPress={handleSend}
               disabled={!text.trim() || sending}
               style={{
-                width: 46,
-                height: 46,
-                borderRadius: 23,
-                backgroundColor:
-                  text.trim() && !sending ? "#1B4332" : "#D8F3DC",
-                alignItems: "center",
-                justifyContent: "center",
+                width:           46,
+                height:          46,
+                borderRadius:    23,
+                backgroundColor: text.trim() && !sending ? "#1B4332" : "#D8F3DC",
+                alignItems:      "center",
+                justifyContent:  "center",
               }}
             >
               {sending ? (

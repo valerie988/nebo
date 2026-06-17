@@ -21,7 +21,9 @@ class ChatSocket {
 
   connect(token: string, userId: string): void {
     this.token     = token;
-    this.userId    = String(userId);   // ← always string, fixes int/string mismatch
+    // FIX: always normalize to a clean trimmed string — prevents int/string
+    // mismatch that caused isMyEcho to fail and own messages to echo back
+    this.userId    = String(userId).trim();
     this.destroyed = false;
     this._open();
   }
@@ -77,51 +79,71 @@ class ChatSocket {
       this.ws = new WebSocket(`${WS_BASE}/api/chat/ws/${this.token}`);
 
       this.ws.onopen = async () => {
-         console.log(" WebSocket connected for user:", this.userId);
+        console.log("✅ WS connected, userId:", this.userId);
         this.retryCount = 0;
         this._notifyStatus(true);
         await this._flushPending();
       };
 
       this.ws.onmessage = async (event) => {
-        console.log(" WS message received:", event.data);
         try {
           const data = JSON.parse(event.data);
 
+          // FIX: normalize both sides to trimmed strings before comparing
+          // to prevent "123" !== 123 type mismatches
+          const dataSenderId = String(data.sender_id ?? "").trim();
+          const myUserId     = String(this.userId).trim();
+
+          console.log("📨 RAW WS:", JSON.stringify({
+            type:        data.type,
+            sender_id:   dataSenderId,
+            receiver_id: data.receiver_id,
+            local_id:    data.local_id,
+            my_userId:   myUserId,
+            isMyEcho:    dataSenderId === myUserId,
+          }));
+
+          // ── Delivery confirmation ────────────────────────────────────────
           if (data.type === "delivered" && data.local_id) {
             await chatService.confirmMessage(
-              this.userId, data.local_id, data.message_id, data.conversation_id
+              myUserId, data.local_id, data.message_id, data.conversation_id,
             );
             return;
           }
 
+          // ── Incoming message ─────────────────────────────────────────────
           if (data.type === "message") {
-            // Compare as strings to avoid int/string mismatch
-            const isMyEcho = String(data.sender_id) === String(this.userId);
+            // FIX: use normalized strings for the echo check
+            const isMyEcho = dataSenderId === myUserId;
 
-            if (isMyEcho && data.local_id) {
-              await chatService.confirmMessage(
-                this.userId, data.local_id, data.id, data.conversation_id
-              );
+            if (isMyEcho) {
+              // Our own message echoed back — confirm delivery only, do NOT
+              // re-add it to the message list (was causing customer echo bug)
+              if (data.local_id) {
+                await chatService.confirmMessage(
+                  myUserId, data.local_id, data.id, data.conversation_id,
+                );
+              }
               return;
             }
 
-            const senderRole = data.sender_role || "customer";
+            // Message FROM someone else TO us
+            const senderRole: "farmer" | "customer" =
+              data.sender_role === "farmer" ? "farmer" : "customer";
 
-            // Ensure conversation exists locally BEFORE saving the message
-            await chatService.getOrCreateConversation(this.userId, {
-              participantId:    String(data.sender_id),
-              participantName:  data.sender_name,
-              participantRole:  senderRole,
-              serverConvoId:    data.conversation_id,
+            await chatService.getOrCreateConversation(myUserId, {
+              participantId:   dataSenderId,
+              participantName: data.sender_name  || "Unknown",
+              participantRole: senderRole,
+              serverConvoId:   String(data.conversation_id ?? "").trim(),
             });
 
             const msg: Message = {
               id:             data.id,
-              conversationId: data.conversation_id,
-              senderId:       String(data.sender_id),
-              senderName:     data.sender_name || "",
-              receiverId:     String(data.receiver_id),
+              conversationId: String(data.conversation_id ?? "").trim(),
+              senderId:       dataSenderId,
+              senderName:     data.sender_name  || "",
+              receiverId:     String(data.receiver_id ?? "").trim(),
               receiverName:   data.receiver_name || "",
               text:           data.text,
               createdAt:      data.created_at,
@@ -130,7 +152,7 @@ class ChatSocket {
               synced:         true,
             };
 
-            await chatService.receiveMessage(this.userId, msg);
+            await chatService.receiveMessage(myUserId, msg);
             this._notifyMsg(msg);
           }
         } catch (e) {
@@ -138,11 +160,15 @@ class ChatSocket {
         }
       };
 
-      this.ws.onerror  = (e) => { console.warn("chatSocket error:", e); };
-      this.ws.onclose  = () => {
+      this.ws.onerror = (e) => {
+        console.warn("chatSocket error:", e);
+      };
+
+      this.ws.onclose = () => {
         this._notifyStatus(false);
         if (!this.destroyed) this._scheduleRetry();
       };
+
     } catch {
       if (!this.destroyed) this._scheduleRetry();
     }

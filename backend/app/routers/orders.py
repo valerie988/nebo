@@ -80,7 +80,7 @@ async def create_order(
         # 3. Notify farmer
         farmer_notification = Notification(
             user_id=payload.farmer_id,
-            title="New Order Received! 🌾",
+            title="New Order Received! ",
             message=f"{current_user.full_name or 'A customer'} placed an order for {payload.quantity}x {payload.product_name}.",
             type="order",
             is_read=False,

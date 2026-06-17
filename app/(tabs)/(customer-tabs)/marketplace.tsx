@@ -77,7 +77,7 @@ export default function MarketplaceScreen() {
   return (
     <View className="flex-1 bg-[#F8FDF9]">
       <SafeAreaView className="flex-1">
-        <View className="px-5 pt-4 pb-2">
+        <View className="px-5 pt-4 ">
           <Text className="text-[#1B4332] text-3xl font-black tracking-tighter">
             Marketplace
           </Text>
@@ -149,11 +149,11 @@ export default function MarketplaceScreen() {
 
               {/* Pagination controls only display if threshold is met */}
               {shouldPaginate && totalPages > 1 && (
-                <View className="flex-row justify-center items-center gap-6 py-6 mb-4">
+                <View className="flex-row justify-center items-center gap-4  ">
                   <TouchableOpacity
                     disabled={currentPage === 1}
                     onPress={() => setCurrentPage((c) => c - 1)}
-                    className={`p-3 rounded-xl border ${currentPage === 1 ? "border-[#E2F5E9] bg-transparent" : "border-[#1B4332] bg-white"}`}
+                    className={`p-1 rounded-xl border ${currentPage === 1 ? "border-[#E2F5E9] bg-transparent" : "border-[#1B4332] bg-white"}`}
                   >
                     <Ionicons
                       name="chevron-back"
@@ -170,7 +170,7 @@ export default function MarketplaceScreen() {
                   <TouchableOpacity
                     disabled={currentPage === totalPages}
                     onPress={() => setCurrentPage((c) => c + 1)}
-                    className={`p-3 rounded-xl border ${currentPage === totalPages ? "border-[#E2F5E9] bg-transparent" : "border-[#1B4332] bg-white"}`}
+                    className={`p-1 rounded-xl border ${currentPage === totalPages ? "border-[#E2F5E9] bg-transparent" : "border-[#1B4332] bg-white"}`}
                   >
                     <Ionicons
                       name="chevron-forward"
