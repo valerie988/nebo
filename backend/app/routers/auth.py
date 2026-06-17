@@ -59,12 +59,12 @@ async def signup(
     db.flush()  
 
     db.refresh(user)
-    access  = create_access_token({"sub": user.id, "role": user.role})
-    refresh = create_refresh_token({"sub": user.id})
+    access  = create_access_token({"sub": str(user.id), "role": user.role})
+    refresh = create_refresh_token({"sub": str(user.id)})
 
     rt = RefreshToken(
         token=refresh,
-        user_id=user.id,
+        user_id=user.id,          # keep as-is, this is the DB FK (int is fine here)
         expires_at=utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
     )
     db.add(rt)
@@ -100,9 +100,9 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
         print(f"DEBUG: Password mismatch for '{raw_input}'")
         raise HTTPException(status_code=401, detail="Invalid email/phone or password")
 
-    # 5. Generate tokens
-    access  = create_access_token({"sub": user.id, "role": user.role})
-    refresh = create_refresh_token({"sub": user.id})
+    # login
+    access  = create_access_token({"sub": str(user.id), "role": user.role})
+    refresh = create_refresh_token({"sub": str(user.id)})
 
     db.add(RefreshToken(
         token=refresh,
@@ -139,8 +139,8 @@ def refresh_token(body: RefreshRequest, db: Session = Depends(get_db)):
     # Rotate: revoke old, issue new
     rt.revoked = True
 
-    new_access  = create_access_token({"sub": user.id, "role": user.role})
-    new_refresh = create_refresh_token({"sub": user.id})
+    new_access  = create_access_token({"sub": str(user.id), "role": user.role})
+    new_refresh = create_refresh_token({"sub": str(user.id)})
 
     new_rt = RefreshToken(
         token=new_refresh,

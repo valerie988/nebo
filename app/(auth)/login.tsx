@@ -84,7 +84,7 @@ export default function LoginScreen() {
           >
             <View className="px-10 pt-12 pb-10">
               <Text className="text-white text-[44px] font-[800]">
-                Yooo! 👋
+                Welcome 
               </Text>
             </View>
 

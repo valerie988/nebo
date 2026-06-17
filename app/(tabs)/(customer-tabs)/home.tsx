@@ -4,7 +4,13 @@ import { Feather, Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 import { useRouter } from "expo-router";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   ActivityIndicator,
   Dimensions,
@@ -20,20 +26,20 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Circle, Path, Svg } from "react-native-svg";
 
-const { width } = Dimensions.get("window");
-
-const scale = (size: number) => (width / 375) * size;
-const API_URL = Constants.expoConfig?.extra?.API_URL;
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
+const scale = (size: number) => (SCREEN_WIDTH / 375) * size;
+const API_URL = Constants.expoConfig?.extra?.API_URL;
 const SLIDE_WIDTH = SCREEN_WIDTH - 40;
 const GAP = 16;
 const ITEM_LENGTH = SLIDE_WIDTH + GAP;
 
+type IoniconsName = React.ComponentProps<typeof Ionicons>["name"];
+
 const FILTERS = [
-  { id: "all", label: "All", icon: "grid-outline" },
-  { id: "nearby", label: "Nearby", icon: "location-outline" },
-  { id: "recommended", label: "For You", icon: "star-outline" },
-  { id: "popular", label: "Popular", icon: "flame-outline" },
+  { id: "all", label: "All", icon: "grid-outline" as IoniconsName },
+  { id: "nearby", label: "Nearby", icon: "location-outline" as IoniconsName },
+  { id: "recommended", label: "For You", icon: "star-outline" as IoniconsName },
+  { id: "popular", label: "Popular", icon: "flame-outline" as IoniconsName },
 ];
 
 const CAROUSEL = [
@@ -66,22 +72,28 @@ const SEAMLESS = [
   { ...CAROUSEL[0], id: "clone-first" },
 ];
 
-function getEmoji(cat: string) {
-  const map: Record<string, string> = {
-    veggies: "🥕",
-    fruits: "🍎",
-    grains: "🌾",
-    herbs: "🌿",
-    roots: "🌽",
+function getCategoryIcon(cat: string): IoniconsName {
+  const map: Record<string, IoniconsName> = {
+    veggies: "leaf-outline",
+    fruits: "nutrition-outline",
+    grains: "analytics-outline",
+    herbs: "leaf-outline",
+    roots: "beaker-outline",
   };
-  return map[cat?.toLowerCase()] || "📦";
+  return map[cat?.toLowerCase()] || "cube-outline";
 }
 
-function SafeFilterIcon({ name, color }: { name: string; color: string }) {
+function SafeFilterIcon({
+  name,
+  color,
+}: {
+  name: IoniconsName;
+  color: string;
+}) {
   try {
     return (
       <Ionicons
-        name={name as any}
+        name={name}
         size={16}
         color={color}
         style={{ marginRight: 6 }}
@@ -93,14 +105,20 @@ function SafeFilterIcon({ name, color }: { name: string; color: string }) {
 }
 
 function MatchBadge({ label }: { label?: string }) {
-  if (!label) return null;
-  const map: Record<string, { bg: string; text: string; icon: string }> = {
-    Nearby: { bg: "#D8F3DC", text: "#1B4332", icon: "📍" },
-    "Your Region": { bg: "#FEF3C7", text: "#92400E", icon: "" },
-    Recommended: { bg: "#EDE9FE", text: "#5B21B6", icon: "" },
-    Explore: { bg: "#F1F5F9", text: "#475569", icon: "" },
+  if (!label || label === "Explore") return null;
+  const map: Record<string, { bg: string; text: string; icon: IoniconsName }> =
+    {
+      Nearby: { bg: "#D8F3DC", text: "#1B4332", icon: "location" },
+      "Your Region": { bg: "#FEF3C7", text: "#92400E", icon: "map" },
+      Recommended: { bg: "#EDE9FE", text: "#5B21B6", icon: "sparkles" },
+      Popular: { bg: "#FEE2E2", text: "#991B1B", icon: "flame" },
+      New: { bg: "#E0F2FE", text: "#075985", icon: "leaf" },
+    };
+  const c = map[label] || {
+    bg: "#F1F5F9",
+    text: "#475569",
+    icon: "cube-outline" as IoniconsName,
   };
-  const c = map[label] || map["Explore"];
   return (
     <View
       style={{
@@ -114,21 +132,35 @@ function MatchBadge({ label }: { label?: string }) {
         alignItems: "center",
       }}
     >
-      <Text style={{ fontSize: 8 }}>{c.icon}</Text>
-      <Text
-        style={{ color: c.text, fontSize: 9, fontWeight: "700", marginLeft: 2 }}
-      >
+      {c.icon ? (
+        <Ionicons
+          name={c.icon}
+          size={10}
+          color={c.text}
+          style={{ marginRight: 3 }}
+        />
+      ) : null}
+      <Text style={{ color: c.text, fontSize: 9, fontWeight: "700" }}>
         {label}
       </Text>
     </View>
   );
 }
 
-function ProductCard({ item, router }: { item: any; router: any }) {
+interface ProductCardProps {
+  item: any;
+  router: any;
+  onPressCard: (id: string) => void;
+}
+
+function ProductCard({ item, router, onPressCard }: ProductCardProps) {
   const img = item?.image || item?.photos?.[0];
+  const farmerName =
+    item.farmer?.full_name || item.farmer?.name || "Verified Merchant";
+
   return (
     <TouchableOpacity
-      onPress={() => router.push(`/product/${item.id}`)}
+      onPress={() => onPressCard(item.id)}
       activeOpacity={0.85}
       style={{
         width: 160,
@@ -158,7 +190,11 @@ function ProductCard({ item, router }: { item: any; router: any }) {
             resizeMode="cover"
           />
         ) : (
-          <Text style={{ fontSize: 36 }}>{getEmoji(item.category)}</Text>
+          <Ionicons
+            name={getCategoryIcon(item.category)}
+            size={32}
+            color="#52B788"
+          />
         )}
       </View>
       <View style={{ paddingHorizontal: 6, paddingBottom: 4 }}>
@@ -169,17 +205,29 @@ function ProductCard({ item, router }: { item: any; router: any }) {
         >
           {item.name}
         </Text>
-        <Text
+        <View
           style={{
-            color: "#52B788",
-            fontSize: 11,
-            fontWeight: "600",
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 3,
             marginTop: 2,
           }}
-          numberOfLines={1}
         >
-          {item.farmer?.full_name || "Verified Merchant"}
-        </Text>
+          <Text
+            style={{
+              color: "#52B788",
+              fontSize: 11,
+              fontWeight: "600",
+              flexShrink: 1,
+            }}
+            numberOfLines={1}
+          >
+            {farmerName}
+          </Text>
+          {item.farmer?.is_verified && (
+            <Ionicons name="checkmark-circle" size={11} color="#52B788" />
+          )}
+        </View>
         <View
           style={{
             flexDirection: "row",
@@ -221,13 +269,16 @@ export default function HomeScreen() {
     stopAutoPlay();
     autoPlayTimerRef.current = setInterval(() => {
       const next = internalIndexRef.current + 1;
-      flatListRef.current?.scrollToOffset({
-        offset: next * ITEM_LENGTH,
-        animated: true,
-      });
-      internalIndexRef.current = next;
+      if (flatListRef.current) {
+        flatListRef.current.scrollToOffset({
+          offset: next * ITEM_LENGTH,
+          animated: true,
+        });
+        internalIndexRef.current = next;
+      }
     }, 3500);
   };
+
   const stopAutoPlay = () => {
     if (autoPlayTimerRef.current) clearInterval(autoPlayTimerRef.current);
   };
@@ -261,13 +312,28 @@ export default function HomeScreen() {
     return () => stopAutoPlay();
   }, [loading]);
 
-  // ── Auth token helper ─────────────────────────────────────────────────────
   const getToken = async () =>
-    (await AsyncStorage.getItem("access_token")) ||
     (await AsyncStorage.getItem("nebo_token")) ||
+    (await AsyncStorage.getItem("access_token")) ||
     (await AsyncStorage.getItem("token"));
 
-  // ── Fetch products for a given filter ────────────────────────────────────
+  const handleProductSelection = async (productId: string) => {
+    try {
+      const token = await getToken();
+      fetch(`${API_URL}/api/recommendations/view`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
+        body: JSON.stringify({ product_id: productId }),
+      });
+    } catch (err) {
+      console.warn("View tracking failed silently", err);
+    }
+    router.push(`/product/${productId}`);
+  };
+
   const fetchProducts = async (filter: string, isRefresh = false) => {
     if (!API_URL) return;
     isRefresh
@@ -279,23 +345,7 @@ export default function HomeScreen() {
     try {
       const token = await getToken();
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
-
-      let url = "";
-
-      switch (filter) {
-        case "nearby":
-          url = `${API_URL}/api/recommendations/products?filter=nearby&limit=20`;
-          break;
-        case "recommended":
-          url = `${API_URL}/api/recommendations/products?filter=recommended&limit=20`;
-          break;
-        case "popular":
-          url = `${API_URL}/api/recommendations/products?filter=popular&limit=20`;
-          break;
-        default:
-          url = `${API_URL}/api/recommendations/products?filter=all&limit=20`;
-          break;
-      }
+      const url = `${API_URL}/api/recommendations/products?filter=${filter}&limit=20`;
 
       const res = await fetch(url, {
         headers: headers as Record<string, string>,
@@ -303,19 +353,19 @@ export default function HomeScreen() {
       if (!res.ok) throw new Error(`${res.status}`);
 
       const data = await res.json();
-
-      // ── Save products to state ────────────────────────────────────────────
       setAllProducts(data);
 
-      // Location label for header
-      if (data.length > 0 && filter !== "all") {
+      if (data.length > 0 && filter === "nearby") {
         const nearbyCount = data.filter(
           (p: any) => p.match_label === "Nearby",
         ).length;
-        setLocationLabel(nearbyCount > 0 ? `${nearbyCount} near you` : "");
+        setLocationLabel(
+          nearbyCount > 0 ? `${nearbyCount} near you` : "In your region",
+        );
+      } else if (filter === "all") {
+        setLocationLabel("");
       }
     } catch (err) {
-      // Fallback to plain products
       try {
         const res = await fetch(`${API_URL}/api/products?limit=20`);
         if (res.ok) setAllProducts(await res.json());
@@ -327,25 +377,24 @@ export default function HomeScreen() {
     }
   };
 
-  // ── Fetch farmers (always location-aware) ─────────────────────────────────
   const fetchFarmers = async () => {
+    if (!API_URL) return;
     try {
       const token = await getToken();
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
-      if (token) {
-        const res = await fetch(
-          `${API_URL}/api/recommendations/farmers?limit=6`,
-          { headers: headers as Record<string, string> },
-        );
-        if (res.ok) {
-          setFarmers(await res.json());
-          return;
-        }
+      const res = await fetch(
+        `${API_URL}/api/recommendations/farmers?limit=6`,
+        {
+          headers: headers as Record<string, string>,
+        },
+      );
+      if (res.ok) {
+        setFarmers(await res.json());
+      } else {
+        const fallbackRes = await fetch(`${API_URL}/api/users?role=farmer`);
+        if (fallbackRes.ok) setFarmers((await fallbackRes.json()).slice(0, 6));
       }
-      // Fallback
-      const res = await fetch(`${API_URL}/api/users?role=farmer`);
-      if (res.ok) setFarmers((await res.json()).slice(0, 6));
     } catch {}
   };
 
@@ -353,7 +402,6 @@ export default function HomeScreen() {
     Promise.all([fetchProducts("all"), fetchFarmers()]);
   }, []);
 
-  // Refetch when filter changes
   const handleFilterChange = (filterId: string) => {
     setActiveFilter(filterId);
     fetchProducts(filterId);
@@ -365,10 +413,11 @@ export default function HomeScreen() {
     fetchFarmers();
   }, [activeFilter]);
 
-  // Search filters the already-loaded products client-side
-  const displayed = allProducts.filter((item) =>
-    item.name?.toLowerCase().includes(search.toLowerCase()),
-  );
+  const displayed = useMemo(() => {
+    return allProducts.filter((item) =>
+      item.name?.toLowerCase().includes(search.toLowerCase()),
+    );
+  }, [allProducts, search]);
 
   const hour = new Date().getHours();
   const greeting =
@@ -383,7 +432,7 @@ export default function HomeScreen() {
       case "popular":
         return "Trending now";
       default:
-        return locationLabel || "Fresh today";
+        return "Fresh today";
     }
   };
 
@@ -450,7 +499,9 @@ export default function HomeScreen() {
                       fontWeight: "600",
                     }}
                   >
-                    {locationLabel || user?.location}
+                    {activeFilter === "nearby" && locationLabel
+                      ? locationLabel
+                      : user?.location || "Buea"}
                   </Text>
                 </View>
               )}
@@ -727,7 +778,12 @@ export default function HomeScreen() {
                   borderColor: "#D8F3DC",
                 }}
               >
-                <Text style={{ fontSize: 20, marginBottom: 4 }}>🍃</Text>
+                <Ionicons
+                  name="leaf-outline"
+                  size={24}
+                  color="#2D6A4F"
+                  style={{ marginBottom: 4 }}
+                />
                 <Text
                   style={{
                     color: "#2D6A4F",
@@ -737,7 +793,7 @@ export default function HomeScreen() {
                   }}
                 >
                   {activeFilter === "nearby"
-                    ? "No produce found near you yet.\nTry 'All' to see everything."
+                    ? "No produce found in your region yet.\nTry 'All' to see everything."
                     : "No produce matches this filter yet."}
                 </Text>
               </View>
@@ -748,7 +804,12 @@ export default function HomeScreen() {
                 contentContainerStyle={{ paddingHorizontal: scale(16) }}
               >
                 {displayed.map((item) => (
-                  <ProductCard key={item.id} item={item} router={router} />
+                  <ProductCard
+                    key={item.id}
+                    item={item}
+                    router={router}
+                    onPressCard={handleProductSelection}
+                  />
                 ))}
               </ScrollView>
             )}
@@ -770,18 +831,16 @@ export default function HomeScreen() {
                 >
                   Nearby Farmers
                 </Text>
-                {user?.location && (
-                  <Text
-                    style={{
-                      color: "#52B788",
-                      fontSize: 11,
-                      fontWeight: "600",
-                      marginTop: 2,
-                    }}
-                  >
-                    📍 Near {user.location}
-                  </Text>
-                )}
+                <Text
+                  style={{
+                    color: "#52B788",
+                    fontSize: 11,
+                    fontWeight: "600",
+                    marginTop: 2,
+                  }}
+                >
+                  📍 Region: {user?.location || "Buea"}
+                </Text>
               </View>
               <TouchableOpacity>
                 <Text
@@ -802,113 +861,125 @@ export default function HomeScreen() {
                 }}
               >
                 <Text style={{ color: "#95D5B2", fontSize: 13 }}>
-                  No farmers found near you yet
+                  No regional merchants listed yet
                 </Text>
               </View>
             ) : (
-              farmers.map((farmer) => (
-                <View
-                  key={farmer.id}
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    backgroundColor: "#fff",
-                    borderRadius: 16,
-                    padding: 16,
-                    marginBottom: 12,
-                    borderWidth: 1,
-                    borderColor: "#D8F3DC",
-                  }}
-                >
+              farmers.map((farmer) => {
+                const farmerName = farmer.full_name || farmer.name || "Farmer";
+                return (
                   <View
+                    key={farmer.id}
                     style={{
-                      width: 48,
-                      height: 48,
-                      borderRadius: 12,
-                      backgroundColor: "#F0FAF4",
+                      flexDirection: "row",
                       alignItems: "center",
-                      justifyContent: "center",
-                      marginRight: 14,
+                      backgroundColor: "#fff",
+                      borderRadius: 16,
+                      padding: 16,
+                      marginBottom: 12,
                       borderWidth: 1,
                       borderColor: "#D8F3DC",
-                      overflow: "hidden",
                     }}
                   >
-                    {farmer.avatar_url || farmer.profile_pic ? (
-                      <Image
-                        source={{
-                          uri: farmer.avatar_url || farmer.profile_pic,
-                        }}
-                        style={{ width: "100%", height: "100%" }}
-                        resizeMode="cover"
-                      />
-                    ) : (
-                      <Ionicons
-                        name="person-outline"
-                        size={24}
-                        color="#1B7344"
-                      />
-                    )}
-                  </View>
-                  <View style={{ flex: 1 }}>
                     <View
                       style={{
-                        flexDirection: "row",
+                        width: 48,
+                        height: 48,
+                        borderRadius: 12,
+                        backgroundColor: "#F0FAF4",
                         alignItems: "center",
-                        gap: 6,
+                        justifyContent: "center",
+                        marginRight: 14,
+                        borderWidth: 1,
+                        borderColor: "#D8F3DC",
+                        overflow: "hidden",
                       }}
                     >
-                      <Text
-                        style={{
-                          color: "#1B4332",
-                          fontWeight: "900",
-                          fontSize: 14,
-                        }}
-                      >
-                        {farmer.full_name || farmer.name}
-                      </Text>
-                      {farmer.is_verified && (
-                        <Text style={{ fontSize: 12 }}>✅</Text>
+                      {farmer.avatar_url || farmer.profile_pic ? (
+                        <Image
+                          source={{
+                            uri: farmer.avatar_url || farmer.profile_pic,
+                          }}
+                          style={{ width: "100%", height: "100%" }}
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <Ionicons
+                          name="person-outline"
+                          size={24}
+                          color="#1B7344"
+                        />
                       )}
                     </View>
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        marginTop: 2,
-                        gap: 4,
-                      }}
-                    >
-                      <Feather name="map-pin" size={11} color="#52B788" />
-                      <Text
+                    <View style={{ flex: 1 }}>
+                      <View
                         style={{
-                          color: "#95D5B2",
-                          fontSize: 12,
-                          fontWeight: "700",
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: 6,
                         }}
                       >
-                        {farmer.location || "Cameroon"}
-                      </Text>
-                    </View>
-                    {farmer.match_label && farmer.match_label !== "Explore" && (
-                      <MatchBadge label={farmer.match_label} />
-                    )}
-                    {farmer.product_count > 0 && (
-                      <Text
-                        style={{ color: "#B7E4C7", fontSize: 10, marginTop: 2 }}
+                        <Text
+                          style={{
+                            color: "#1B4332",
+                            fontWeight: "900",
+                            fontSize: 14,
+                          }}
+                        >
+                          {farmerName}
+                        </Text>
+                        {farmer.is_verified && (
+                          <Ionicons
+                            name="checkmark-circle"
+                            size={14}
+                            color="#1B7344"
+                          />
+                        )}
+                      </View>
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          marginTop: 2,
+                          gap: 4,
+                        }}
                       >
-                        {farmer.product_count} product
-                        {farmer.product_count !== 1 ? "s" : ""} listed
-                      </Text>
-                    )}
+                        <Feather name="map-pin" size={11} color="#52B788" />
+                        <Text
+                          style={{
+                            color: "#95D5B2",
+                            fontSize: 12,
+                            fontWeight: "700",
+                          }}
+                        >
+                          {farmer.location || "Cameroon"}
+                        </Text>
+                      </View>
+                      {farmer.match_label && (
+                        <MatchBadge label={farmer.match_label} />
+                      )}
+                      {farmer.product_count > 0 && (
+                        <Text
+                          style={{
+                            color: "#52B788",
+                            fontSize: 10,
+                            marginTop: 4,
+                            fontWeight: "600",
+                          }}
+                        >
+                          {farmer.product_count} product
+                          {farmer.product_count !== 1 ? "s" : ""} listed
+                        </Text>
+                      )}
+                    </View>
+                    <MessageFarmerButton
+                      farmerId={farmer.id}
+                      farmerName={farmerName}
+                      farmerPhone={farmer.phone}
+                    />
                   </View>
-                  <MessageFarmerButton
-                    farmerId={farmer.id}
-                    farmerName={farmer.full_name || farmer.name || "Farmer"}
-                    farmerPhone={farmer.phone}
-                  />
-                </View>
-              ))
+                );
+              })
             )}
           </View>
         </ScrollView>

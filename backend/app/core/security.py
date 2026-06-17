@@ -12,6 +12,9 @@ bearer_scheme = HTTPBearer()
 
 def create_access_token(data: dict) -> str:
     payload = data.copy()
+    # Always store sub as string
+    if "sub" in payload:
+        payload["sub"] = str(payload["sub"])
     expire = datetime.now(timezone.utc) + timedelta(
         minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
     )
@@ -21,6 +24,9 @@ def create_access_token(data: dict) -> str:
 
 def create_refresh_token(data: dict) -> str:
     payload = data.copy()
+    # Always store sub as string
+    if "sub" in payload:
+        payload["sub"] = str(payload["sub"])
     expire = datetime.now(timezone.utc) + timedelta(
         days=settings.REFRESH_TOKEN_EXPIRE_DAYS
     )
@@ -52,7 +58,7 @@ def get_current_user(
     if payload.get("type") != "access":
         raise HTTPException(status_code=401, detail="Invalid token type")
 
-    user_id: str = payload.get("sub")
+    user_id: str = str(payload.get("sub") or "")
     if not user_id:
         raise HTTPException(status_code=401, detail="Invalid token")
 

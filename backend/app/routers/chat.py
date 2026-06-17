@@ -409,3 +409,22 @@ async def sync_offline(
         synced.append({"local_id": item.id, "server_id": msg.id})
 
     return {"synced": synced}
+
+@chat_router.get("/debug/me")
+def debug_me(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    all_convos = db.query(Conversation).all()
+    return {
+        "my_id": current_user.id,
+        "my_id_type": type(current_user.id).__name__,
+        "my_role": current_user.role,
+        "all_participant_ones": [c.participant_one for c in all_convos],
+        "all_participant_twos": [c.participant_two for c in all_convos],
+        "matching": [
+            c.id for c in all_convos
+            if c.participant_one == current_user.id
+            or c.participant_two == current_user.id
+        ]
+    }

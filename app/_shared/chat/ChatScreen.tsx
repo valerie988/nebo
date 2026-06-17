@@ -396,7 +396,6 @@ export function ChatScreen() {
                     marginTop: 80,
                   }}
                 >
-                  <Text style={{ fontSize: 36, marginBottom: 12 }}>👋</Text>
                   <Text
                     style={{
                       color: "#1B4332",

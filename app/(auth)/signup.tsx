@@ -363,7 +363,7 @@ export default function SignupScreen() {
             {/* Branding Header Area */}
             <View className="px-10 pt-9 pb-8">
               <Text className="text-white text-[38px] font-[800]">
-                Hello! 👋
+                Hello! 
               </Text>
               <Text className="text-white text-[17px] mt-1 opacity-80">
                 Create your Ne<Text className="text-[#FF9F1C]">Bo</Text> account

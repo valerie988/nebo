@@ -24,7 +24,7 @@ class Product(Base):
     unit        = Column(String(20), nullable=False)
     quantity    = Column(Float, nullable=False)
     location    = Column(String(255), nullable=False)
-    photos      = Column(JSON, default=list)    # list of URLs
+    photos      = Column(JSON, default=list)    
     in_stock    = Column(Boolean, default=True)
     is_active   = Column(Boolean, default=True)
     created_at  = Column(DateTime(timezone=True), default=utcnow)
